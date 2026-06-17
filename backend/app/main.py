@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, List
 import json
 
-from app.database import engine, Base, get_db
-from app.config import APP_NAME
+from app.database import engine, Base, get_db, SessionLocal
+from app.config import APP_NAME, FRONTEND_URL
 from app.schemas import RunRequest, SessionResponse, SessionDetailsResponse, ContactRequest
 from app.models import SessionModel, LeadModel, OutreachMessageModel, ContactModel
 from app.agents.base import AgentIQWorkflow
@@ -28,9 +28,13 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title=APP_NAME)
 
 # CORS configuration
+CORS_ORIGINS = [
+    FRONTEND_URL,
+    "http://localhost:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for hackathon simplicity
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

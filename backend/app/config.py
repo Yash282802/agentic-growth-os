@@ -21,6 +21,9 @@ MODEL_EMBEDDING = "nvidia/nv-embedqa-e5-v5"
 # Google Places Configuration
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 
+# Frontend URL (for CORS in production)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
 # Database Configuration
 # Defaults to a local SQLite database for zero-config running
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
