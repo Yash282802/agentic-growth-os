@@ -40,6 +40,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "app": APP_NAME}
+
 # Global dictionary to hold SSE message queues for active sessions
 session_queues: Dict[str, asyncio.Queue] = {}
 # Global dict to store generated CSV data in memory for download
