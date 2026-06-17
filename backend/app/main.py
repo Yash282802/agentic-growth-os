@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any, List
 import json
 
-from app.database import engine, Base, get_db, SessionLocal
+from app.database import engine, Base, get_db, SessionLocal, init_db
 from app.config import APP_NAME, FRONTEND_URL
 from app.schemas import RunRequest, SessionResponse, SessionDetailsResponse, ContactRequest
 from app.models import SessionModel, LeadModel, OutreachMessageModel, ContactModel
@@ -22,8 +22,8 @@ from app.agents.crm_agent import CRMAgent
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
 
-# Initialize Database tables
-Base.metadata.create_all(bind=engine)
+# Initialize Database tables (gracefully handles connection issues)
+init_db()
 
 app = FastAPI(title=APP_NAME)
 
