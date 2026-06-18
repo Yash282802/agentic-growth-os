@@ -44,6 +44,17 @@ app.add_middleware(
 async def root():
     return {"status": "ok", "app": APP_NAME}
 
+@app.get("/api/db-check")
+async def db_check():
+    try:
+        from sqlalchemy import text as sql_text
+        db = SessionLocal()
+        db.execute(sql_text("SELECT 1"))
+        db.close()
+        return {"status": "ok", "database": "connected"}
+    except Exception as e:
+        return {"status": "error", "database": str(e)}
+
 # Global dictionary to hold SSE message queues for active sessions
 session_queues: Dict[str, asyncio.Queue] = {}
 # Global dict to store generated CSV data in memory for download
