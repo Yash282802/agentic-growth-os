@@ -4,7 +4,7 @@ services:
     runtime: python
     repo: https://github.com/Yash282802/agentic-growth-os
     plan: free
-    branch: master
+    branch: main
     rootDir: backend
     healthCheckPath: /
     buildCommand: pip install -r requirements.txt
