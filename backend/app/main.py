@@ -60,7 +60,7 @@ session_queues: Dict[str, asyncio.Queue] = {}
 # Global dict to store generated CSV data in memory for download
 session_csv_data: Dict[str, str] = {}
 
-async def run_agent_workflow(session_id: str, niche: str, location: str):
+async def run_agent_workflow(session_id: str, niche: str, location: str, max_leads: int = 10):
     """
     Runs the 5-agent pipeline in the background and streams logs/status through the session queue.
     """
@@ -94,7 +94,7 @@ async def run_agent_workflow(session_id: str, niche: str, location: str):
         ])
         
         # 2. Run sequential agents in a single pass
-        crm_result = await workflow.execute({"niche": niche, "location": location}, sse_callback)
+        crm_result = await workflow.execute({"niche": niche, "location": location, "max_leads": max_leads}, sse_callback)
         
         # Store CSV data in memory for export downloads
         session_csv_data[session_id] = crm_result.get("csv_data", "")
@@ -137,7 +137,7 @@ async def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks,
     session_queues[session_id] = asyncio.Queue()
     
     # Run agent DAG in background thread/task
-    background_tasks.add_task(run_agent_workflow, session_id, request.niche, request.location)
+    background_tasks.add_task(run_agent_workflow, session_id, request.niche, request.location, request.max_leads)
     
     return {"session_id": session_id, "status": "RUNNING"}
 

@@ -35,6 +35,7 @@ class OutreachGeneratedLeadRecord(ScoredLeadRecord):
 class RunRequest(BaseModel):
     niche: str
     location: str
+    max_leads: int = 10
 
 class ContactRequest(BaseModel):
     channel: str

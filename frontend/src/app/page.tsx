@@ -46,10 +46,13 @@ interface AgentState {
   message: string;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function Home() {
   // Input fields
   const [niche, setNiche] = useState("Hair Salons");
   const [location, setLocation] = useState("Austin, Texas");
+  const [maxLeads, setMaxLeads] = useState(10);
   
   // App states
   const [running, setRunning] = useState(false);
@@ -97,7 +100,7 @@ export default function Home() {
 
   const checkBackendHealth = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/sessions");
+      const res = await fetch(`${API_BASE}/api/sessions`);
       if (res.ok) {
         setBackendStatus("online");
       } else {
@@ -110,7 +113,7 @@ export default function Home() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/sessions");
+      const res = await fetch(`${API_BASE}/api/sessions`);
       if (res.ok) {
         const data = await res.json();
         setHistory(data);
@@ -123,7 +126,7 @@ export default function Home() {
   const loadSessionDetails = async (id: string) => {
     try {
       setSelectedSessionId(id);
-      const res = await fetch(`http://localhost:8000/api/session/${id}`);
+      const res = await fetch(`${API_BASE}/api/session/${id}`);
       if (res.ok) {
         const data = await res.json();
         // Setup visual state for completed session
@@ -171,10 +174,10 @@ export default function Home() {
     ]);
 
     try {
-      const response = await fetch("http://localhost:8000/api/run", {
+      const response = await fetch(`${API_BASE}/api/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ niche, location })
+        body: JSON.stringify({ niche, location, max_leads: maxLeads })
       });
 
       if (!response.ok) {
@@ -200,7 +203,7 @@ export default function Home() {
       eventSourceRef.current.close();
     }
 
-    const es = new EventSource(`http://localhost:8000/api/stream/${sId}`);
+    const es = new EventSource(`${API_BASE}/api/stream/${sId}`);
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {
@@ -254,7 +257,7 @@ export default function Home() {
 
   const fetchSessionDetails = async (sId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/session/${sId}`);
+      const res = await fetch(`${API_BASE}/api/session/${sId}`);
       if (res.ok) {
         const data = await res.json();
         setLeads(data.leads || []);
@@ -277,7 +280,7 @@ export default function Home() {
     if (!selectedLead) return;
     setContactingChannel(channel);
     try {
-      const res = await fetch(`http://localhost:8000/api/leads/${leadId}/contact`, {
+      const res = await fetch(`${API_BASE}/api/leads/${leadId}/contact`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ channel })
@@ -429,7 +432,7 @@ export default function Home() {
               <div className="absolute top-0 right-0 w-80 h-80 bg-[#76B900]/5 rounded-full blur-[100px] pointer-events-none"></div>
               
               <div className="flex flex-col lg:flex-row items-end gap-4">
-                <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-zinc-400 tracking-wider uppercase">Business Niche</label>
                     <input 
@@ -451,6 +454,36 @@ export default function Home() {
                       placeholder="e.g. Austin, Texas"
                       className="w-full bg-zinc-950 border border-zinc-800 focus:border-[#76B900]/80 rounded-xl px-4 py-3 text-sm focus:outline-none transition-all disabled:opacity-60 text-zinc-100"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-zinc-400 tracking-wider uppercase">Max Leads</label>
+                    <div className="flex gap-1.5 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
+                      {[10, 20, 30, 50].map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setMaxLeads(n)}
+                          disabled={running}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            maxLeads === n
+                              ? "bg-[#76B900] text-black shadow-[0_0_10px_rgba(118,185,0,0.3)]"
+                              : "text-zinc-400 hover:text-zinc-200"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setMaxLeads(999)}
+                        disabled={running}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                          maxLeads === 999
+                            ? "bg-[#76B900] text-black shadow-[0_0_10px_rgba(118,185,0,0.3)]"
+                            : "text-zinc-400 hover:text-zinc-200"
+                        }`}
+                      >
+                        All
+                      </button>
+                    </div>
                   </div>
                 </div>
                 
@@ -590,7 +623,7 @@ export default function Home() {
                     <h2 className="text-sm font-semibold text-zinc-400 tracking-wider uppercase">Discovered CRM Leads ({leads.length})</h2>
                     {sessionId && (
                       <a 
-                        href={`http://localhost:8000/api/export/${sessionId}`}
+                        href={`${API_BASE}/api/export/${sessionId}`}
                         className="text-xs text-black bg-[#76B900] hover:bg-[#85cf00] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-[0_0_15px_rgba(118,185,0,0.2)]"
                       >
                         <Download className="w-3.5 h-3.5" />
