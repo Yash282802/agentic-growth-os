@@ -39,7 +39,7 @@ class LeadDiscoveryAgent(AgentIQAgent):
                     return await self._simulate_leads(niche, location, log_callback)
                 
                 search_data = search_response.json()
-                results = search_data.get("results", [])[:10] # Limit to top 10 for speed
+                results = search_data.get("results", [])[:50]
                 
                 log_callback(f"Found {len(results)} raw business listings. Fetching contact details...")
                 
