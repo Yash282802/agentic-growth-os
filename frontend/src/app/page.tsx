@@ -5,7 +5,7 @@ import {
   Search, Globe, TrendingUp, FileText, Database, 
   Terminal, Download, Clipboard, Check, RefreshCw, 
   ExternalLink, Phone, MapPin, Star, AlertTriangle, 
-  Shield, CheckCircle2, History, ChevronRight
+  Shield, CheckCircle2, History, ChevronRight, MessageCircle
 } from "lucide-react";
 
 // Types mapping frontend schemas
@@ -831,6 +831,17 @@ export default function Home() {
                                     )}
                                   </button>
                                   
+                                  {outreachTab === "whatsapp" && (
+                                    <a
+                                      href={`https://wa.me/?text=${encodeURIComponent(selectedLead.outreach_messages.find(m => m.channel === outreachTab)?.message_text || "")}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-3.5 py-1.5 rounded-lg bg-[#25D366] text-white font-semibold text-xs flex items-center gap-1.5 hover:bg-[#20bd5a] transition-colors"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                      <span>Open in WhatsApp</span>
+                                    </a>
+                                  )}
                                   <button
                                     onClick={() => handleCopyOutreach(
                                       selectedLead.outreach_messages.find(m => m.channel === outreachTab)?.message_text || "",
