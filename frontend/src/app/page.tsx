@@ -73,7 +73,7 @@ export default function Home() {
   // Results
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [outreachTab, setOutreachTab] = useState<"email" | "linkedin" | "whatsapp" | "facebook">("email");
+  const [outreachTab, setOutreachTab] = useState<"whatsapp" | "email" | "linkedin" | "facebook">("whatsapp");
   const [copiedChannel, setCopiedChannel] = useState<string | null>(null);
   const [contactingChannel, setContactingChannel] = useState<string | null>(null);
   
@@ -785,7 +785,7 @@ export default function Home() {
 
                           {/* Channel Select Tabs */}
                           <div className="flex border-b border-zinc-900 text-xs">
-                            {(["email", "linkedin", "whatsapp", "facebook"] as const).map((ch) => {
+                            {(["whatsapp", "email", "linkedin", "facebook"] as const).map((ch) => {
                               const isContacted = (selectedLead.contacted_channels || []).includes(ch);
                               return (
                                 <button

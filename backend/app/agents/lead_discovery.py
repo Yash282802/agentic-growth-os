@@ -27,21 +27,37 @@ class LeadDiscoveryAgent(AgentIQAgent):
         log_callback(f"Connecting to Google Places API to find {niche} in {location}...")
         
         leads = []
+        import asyncio
         try:
-            # Step 1: Text Search to find Place IDs
+            # Step 1: Text Search to find Place IDs (with pagination)
             query = f"{niche} in {location}"
             encoded_query = urllib.parse.quote(query)
-            search_url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={encoded_query}&key={self.api_key}"
             
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                search_response = await client.get(search_url)
-                if search_response.status_code != 200:
-                    log_callback(f"Google Places API Error: {search_response.status_code}. Falling back to simulation.")
-                    return await self._simulate_leads(niche, location, max_leads, log_callback)
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                all_results = []
+                next_page_token = None
                 
-                search_data = search_response.json()
-                results = search_data.get("results", [])[:max_leads]
+                while len(all_results) < max_leads:
+                    if next_page_token:
+                        await asyncio.sleep(2)
+                        search_url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken={next_page_token}&key={self.api_key}"
+                    else:
+                        search_url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={encoded_query}&key={self.api_key}"
+                    
+                    search_response = await client.get(search_url)
+                    if search_response.status_code != 200:
+                        log_callback(f"Google Places API Error: {search_response.status_code}. Falling back to simulation.")
+                        return await self._simulate_leads(niche, location, max_leads, log_callback)
+                    
+                    search_data = search_response.json()
+                    results_batch = search_data.get("results", [])
+                    all_results.extend(results_batch)
+                    
+                    next_page_token = search_data.get("next_page_token")
+                    if not next_page_token:
+                        break
                 
+                results = all_results[:max_leads]
                 log_callback(f"Found {len(results)} raw business listings. Fetching contact details...")
                 
                 for idx, result in enumerate(results):
