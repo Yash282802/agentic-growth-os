@@ -43,7 +43,7 @@ class NvidiaClient:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=headers,
@@ -63,6 +63,7 @@ class NvidiaClient:
     async def get_embeddings(self, text: str) -> List[float]:
         """
         Retrieves text embeddings using NVIDIA NIM. Falls back to a deterministic mock vector on error.
+        After 3 API failures, switches permanently to fast mock mode.
         """
         if self.is_mock:
             return self._generate_mock_embeddings(text)
@@ -79,8 +80,13 @@ class NvidiaClient:
             "input_type": "query"
         }
 
+        failure_count = getattr(self, "_embed_failures", 0)
+        if failure_count >= 3:
+            logger.warning("NVIDIA Embeddings API failing repeatedly. Using mock mode.")
+            return self._generate_mock_embeddings(text)
+
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 response = await client.post(
                     f"{self.base_url}/embeddings",
                     headers=headers,
@@ -91,9 +97,11 @@ class NvidiaClient:
                     return data["data"][0]["embedding"]
                 else:
                     logger.error(f"NVIDIA Embeddings Error ({response.status_code}): {response.text}")
+                    self._embed_failures = failure_count + 1
                     return self._generate_mock_embeddings(text)
         except Exception as e:
             logger.error(f"NVIDIA Embeddings exception: {str(e)}")
+            self._embed_failures = failure_count + 1
             return self._generate_mock_embeddings(text)
 
     def _generate_mock_embeddings(self, text: str) -> List[float]:
