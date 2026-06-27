@@ -5,10 +5,10 @@ import {
   Search, Globe, TrendingUp, FileText, Database, 
   Terminal, Download, Clipboard, Check, RefreshCw, 
   ExternalLink, Phone, MapPin, Star, AlertTriangle, 
-  Shield, CheckCircle2, History, ChevronRight, MessageCircle
+  Shield, CheckCircle2, History, ChevronRight, MessageCircle,
+  Code, GitBranch, Rocket, Bell, ThumbsUp, Eye
 } from "lucide-react";
 
-// Types mapping frontend schemas
 interface Lead {
   id: string;
   business_name: string;
@@ -26,7 +26,12 @@ interface Lead {
   priority_tier: string;
   is_duplicate: boolean;
   outreach_messages: { channel: string; message_text: string }[];
-  contacted_channels?: string[]; // tracks locally which channels have been contacted
+  contacted_channels?: string[];
+  human_approved?: boolean;
+  prd_markdown?: string;
+  repo_structure?: string;
+  github_repo_url?: string;
+  preview_url?: string;
 }
 
 interface Session {
@@ -49,49 +54,48 @@ interface AgentState {
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function Home() {
-  // Input fields
   const [niche, setNiche] = useState("Hair Salons");
   const [location, setLocation] = useState("Austin, Texas");
   const [maxLeads, setMaxLeads] = useState(10);
   
-  // App states
   const [running, setRunning] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"run" | "history">("run");
   const [backendStatus, setBackendStatus] = useState<"checking" | "online" | "offline">("checking");
   
-  // Streaming logs & agent cards
   const [logs, setLogs] = useState<string[]>([]);
   const [agents, setAgents] = useState<AgentState[]>([
     { name: "Lead Discovery", status: "idle", progress: "Waiting", message: "Discovers businesses using Google Places" },
     { name: "Website Audit", status: "idle", progress: "Waiting", message: "Checks website accessibility and layout quality" },
     { name: "Opportunity Scoring", status: "idle", progress: "Waiting", message: "Applies multi-factor rubric out of 100 points" },
     { name: "Outreach Generation", status: "idle", progress: "Waiting", message: "Drafts personalized copy for 4 channels via LLaMA" },
-    { name: "CRM Storage", status: "idle", progress: "Waiting", message: "Runs E5 embeddings for deduplication and saves in DB" }
+    { name: "CRM Storage", status: "idle", progress: "Waiting", message: "Runs E5 embeddings for deduplication and saves in DB" },
+    { name: "PRD Generation", status: "idle", progress: "Waiting", message: "Writes PRD for approved leads" },
+    { name: "Frontend Generation", status: "idle", progress: "Waiting", message: "Generates Stitch UI prompt from PRD" },
+    { name: "Backend Schema", status: "idle", progress: "Waiting", message: "Designs backend schema for lead's site" },
+    { name: "Build", status: "idle", progress: "Waiting", message: "Scaffolds repo from Stitch export" },
+    { name: "Deploy", status: "idle", progress: "Waiting", message: "Pushes to GitHub + Vercel preview" },
+    { name: "Notify", status: "idle", progress: "Waiting", message: "Summarizes done and outstanding items" },
   ]);
 
-  // Results
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [outreachTab, setOutreachTab] = useState<"whatsapp" | "email" | "linkedin" | "facebook">("whatsapp");
   const [copiedChannel, setCopiedChannel] = useState<string | null>(null);
   const [contactingChannel, setContactingChannel] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   
-  // Session history
   const [history, setHistory] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
-  // References
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  // Check backend health and load history
   useEffect(() => {
     checkBackendHealth();
     fetchHistory();
   }, []);
 
-  // Auto scroll terminal logs
   useEffect(() => {
     if (terminalEndRef.current) {
       terminalEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -129,7 +133,6 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/api/session/${id}`);
       if (res.ok) {
         const data = await res.json();
-        // Setup visual state for completed session
         setLeads(data.leads || []);
         if (data.leads && data.leads.length > 0) {
           setSelectedLead(data.leads[0]);
@@ -137,7 +140,6 @@ export default function Home() {
           setSelectedLead(null);
         }
         
-        // Update agent states to completed for history
         setAgents(prev => prev.map(a => ({
           ...a,
           status: "done",
@@ -150,7 +152,7 @@ export default function Home() {
           `[System] Found ${data.leads?.length || 0} leads (Hot: ${data.hot_leads_count || 0})`
         ]);
         
-        setActiveTab("run"); // switch back to details tab
+        setActiveTab("run");
       }
     } catch (e) {
       console.error("Failed to load session details", e);
@@ -160,7 +162,6 @@ export default function Home() {
   const startPipeline = async () => {
     if (running) return;
     
-    // Clear previous state
     setRunning(true);
     setLeads([]);
     setSelectedLead(null);
@@ -170,7 +171,13 @@ export default function Home() {
       { name: "Website Audit", status: "idle", progress: "Waiting", message: "Checks website accessibility and layout quality" },
       { name: "Opportunity Scoring", status: "idle", progress: "Waiting", message: "Applies multi-factor rubric out of 100 points" },
       { name: "Outreach Generation", status: "idle", progress: "Waiting", message: "Drafts personalized copy for 4 channels via LLaMA" },
-      { name: "CRM Storage", status: "idle", progress: "Waiting", message: "Runs E5 embeddings for deduplication and saves in DB" }
+      { name: "CRM Storage", status: "idle", progress: "Waiting", message: "Runs E5 embeddings for deduplication and saves in DB" },
+      { name: "PRD Generation", status: "idle", progress: "Waiting", message: "Writes PRD for approved leads" },
+      { name: "Frontend Generation", status: "idle", progress: "Waiting", message: "Generates Stitch UI prompt from PRD" },
+      { name: "Backend Schema", status: "idle", progress: "Waiting", message: "Designs backend schema for lead's site" },
+      { name: "Build", status: "idle", progress: "Waiting", message: "Scaffolds repo from Stitch export" },
+      { name: "Deploy", status: "idle", progress: "Waiting", message: "Pushes to GitHub + Vercel preview" },
+      { name: "Notify", status: "idle", progress: "Waiting", message: "Summarizes done and outstanding items" },
     ]);
 
     try {
@@ -187,8 +194,6 @@ export default function Home() {
       const data = await response.json();
       const sId = data.session_id;
       setSessionId(sId);
-
-      // Connect SSE
       connectSSE(sId);
 
     } catch (err: any) {
@@ -223,8 +228,10 @@ export default function Home() {
               message: data.message
             };
           }
-          // Set preceding agents as completed if a subsequent agent starts
-          const agentOrder = ["Lead Discovery", "Website Audit", "Opportunity Scoring", "Outreach Generation", "CRM Storage"];
+          const agentOrder = [
+            "Lead Discovery", "Website Audit", "Opportunity Scoring", "Outreach Generation", "CRM Storage",
+            "PRD Generation", "Frontend Generation", "Backend Schema", "Build", "Deploy", "Notify"
+          ];
           const thisIdx = agentOrder.indexOf(data.agent);
           const currentAgentIdx = agentOrder.indexOf(agent.name);
           if (currentAgentIdx < thisIdx && agent.status !== "done") {
@@ -239,8 +246,13 @@ export default function Home() {
         fetchSessionDetails(sId);
         es.close();
         setRunning(false);
-        fetchHistory(); // refresh history list
+        fetchHistory();
       } 
+      
+      else if (data.type === "build_complete") {
+        setLogs(prev => [...prev, "[System] Build pipeline completed! Refreshing lead details..."]);
+        fetchSessionDetails(sId);
+      }
       
       else if (data.type === "error") {
         setLogs(prev => [...prev, `[System Error] Pipeline stopped: ${data.message}`]);
@@ -251,7 +263,6 @@ export default function Home() {
 
     es.onerror = () => {
       setLogs(prev => [...prev, "[System Warning] Lost connection to EventSource stream. Attempting reconnect..."]);
-      // If running is still true, let the browser retry, otherwise close
     };
   };
 
@@ -267,6 +278,26 @@ export default function Home() {
       }
     } catch (e) {
       setLogs(prev => [...prev, `[System Error] Failed to fetch CRM records: ${e}`]);
+    }
+  };
+
+  const handleApprove = async (leadId: string) => {
+    setApprovingId(leadId);
+    try {
+      const res = await fetch(`${API_BASE}/api/leads/${leadId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      if (res.ok) {
+        setLogs(prev => [...prev, `[System] Build pipeline started for lead ${leadId.slice(0, 8)}...`]);
+        setLeads(prev => prev.map(l => l.id === leadId ? { ...l, human_approved: true } : l));
+        setSelectedLead(prev => prev?.id === leadId ? { ...prev, human_approved: true } : prev);
+        if (sessionId) connectSSE(sessionId);
+      }
+    } catch (e) {
+      setLogs(prev => [...prev, `[System Error] Failed to approve lead: ${e}`]);
+    } finally {
+      setApprovingId(null);
     }
   };
 
@@ -286,14 +317,10 @@ export default function Home() {
         body: JSON.stringify({ channel })
       });
       if (res.ok) {
-        // Update lead state locally
         const updatedLeads = leads.map(l => {
           if (l.id === leadId) {
             const currentContacted = l.contacted_channels || [];
-            return {
-              ...l,
-              contacted_channels: [...currentContacted, channel]
-            };
+            return { ...l, contacted_channels: [...currentContacted, channel] };
           }
           return l;
         });
@@ -314,6 +341,12 @@ export default function Home() {
       case "Opportunity Scoring": return <TrendingUp className="w-5 h-5" />;
       case "Outreach Generation": return <FileText className="w-5 h-5" />;
       case "CRM Storage": return <Database className="w-5 h-5" />;
+      case "PRD Generation": return <FileText className="w-5 h-5" />;
+      case "Frontend Generation": return <Code className="w-5 h-5" />;
+      case "Backend Schema": return <Database className="w-5 h-5" />;
+      case "Build": return <GitBranch className="w-5 h-5" />;
+      case "Deploy": return <Rocket className="w-5 h-5" />;
+      case "Notify": return <Bell className="w-5 h-5" />;
       default: return <Terminal className="w-5 h-5" />;
     }
   };
@@ -330,7 +363,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-50 font-sans selection:bg-[#76B900]/30 selection:text-white pb-12">
       
-      {/* HEADER SECTION */}
       <header className="border-b border-zinc-900 bg-zinc-950/80 backdrop-blur sticky top-0 z-50 px-6 py-4">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -374,7 +406,6 @@ export default function Home() {
 
       <div className="max-w-7xl mx-auto px-6 mt-8">
 
-        {/* VIEW 1: HISTORY SELECTOR VIEW */}
         {activeTab === "history" && (
           <div className="bg-zinc-900/40 border border-zinc-800 rounded-xl p-6 backdrop-blur">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -393,13 +424,9 @@ export default function Home() {
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[#76B900] font-semibold text-sm">
-                          {sess.niche}
-                        </span>
+                        <span className="font-mono text-[#76B900] font-semibold text-sm">{sess.niche}</span>
                         <span className="text-zinc-400 text-xs">in</span>
-                        <span className="text-zinc-300 font-semibold text-sm">
-                          {sess.location}
-                        </span>
+                        <span className="text-zinc-300 font-semibold text-sm">{sess.location}</span>
                       </div>
                       <div className="text-[10px] text-zinc-500 font-mono mt-1">
                         ID: {sess.id} | {new Date(sess.created_at).toLocaleString()}
@@ -423,11 +450,9 @@ export default function Home() {
           </div>
         )}
 
-        {/* VIEW 2: ACTIVE PIPELINE & RUN SECTION */}
         {activeTab === "run" && (
           <div className="space-y-8">
             
-            {/* CONTROL PANEL */}
             <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 shadow-xl backdrop-blur relative overflow-hidden">
               <div className="absolute top-0 right-0 w-80 h-80 bg-[#76B900]/5 rounded-full blur-[100px] pointer-events-none"></div>
               
@@ -507,70 +532,69 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 5 VISUAL AGENTS GRID */}
             <div className="space-y-3">
               <h2 className="text-xs font-semibold text-zinc-400 tracking-wider uppercase px-1">Visual Agent Execution DAG</h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {agents.map((agent, index) => (
-                  <div 
-                    key={agent.name}
-                    className={`border rounded-xl p-4 transition-all relative ${getAgentStatusColor(agent.status)}`}
-                  >
-                    {/* Status Badge */}
-                    <div className="absolute top-4 right-4">
-                      {agent.status === "running" && (
-                        <div className="flex items-center gap-1 text-[10px] text-[#76B900] bg-[#76B900]/10 px-2 py-0.5 rounded border border-[#76B900]/30 font-mono">
-                          <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                          <span>ACTIVE</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-3">
+                {agents.map((agent, index) => {
+                  const isBuildAgent = index >= 5;
+                  return (
+                    <div 
+                      key={agent.name}
+                      className={`border rounded-xl p-3 transition-all relative ${getAgentStatusColor(agent.status)} ${isBuildAgent && agent.status === "idle" ? "border-dashed border-zinc-800/50" : ""}`}
+                    >
+                      <div className="absolute top-3 right-3">
+                        {agent.status === "running" && (
+                          <div className="flex items-center gap-1 text-[10px] text-[#76B900] bg-[#76B900]/10 px-2 py-0.5 rounded border border-[#76B900]/30 font-mono">
+                            <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                            <span>ACTIVE</span>
+                          </div>
+                        )}
+                        {agent.status === "done" && (
+                          <div className="text-[#76B900]">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                        )}
+                        {agent.status === "failed" && (
+                          <div className="text-red-500">
+                            <AlertTriangle className="w-4 h-4 animate-bounce" />
+                          </div>
+                        )}
+                        {agent.status === "idle" && (
+                          <span className="text-[9px] font-mono text-zinc-500 border border-zinc-800 bg-zinc-900/30 px-1.5 py-0.5 rounded">
+                            {isBuildAgent ? "AWAIT" : "PENDING"}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center border text-[11px] ${
+                          agent.status === "running" ? "bg-[#76B900]/10 text-[#76B900] border-[#76B900]/30" : 
+                          agent.status === "done" ? "bg-[#76B900]/5 text-[#76B900] border-[#76B900]/20" : 
+                          "bg-zinc-900 text-zinc-400 border-zinc-800"
+                        }`}>
+                          {getAgentIcon(agent.name)}
                         </div>
-                      )}
-                      {agent.status === "done" && (
-                        <div className="text-[#76B900]">
-                          <CheckCircle2 className="w-5 h-5" />
+                        <div className="min-w-0">
+                          <div className="text-[9px] text-zinc-500 font-mono">{isBuildAgent ? "Build" : "Agent"} {isBuildAgent ? index - 4 : index + 1}</div>
+                          <h3 className="text-[11px] font-bold text-zinc-200 truncate">{agent.name}</h3>
                         </div>
-                      )}
-                      {agent.status === "failed" && (
-                        <div className="text-red-500">
-                          <AlertTriangle className="w-5 h-5 animate-bounce" />
-                        </div>
-                      )}
-                      {agent.status === "idle" && (
-                        <span className="text-[10px] font-mono text-zinc-500 border border-zinc-800 bg-zinc-900/30 px-2 py-0.5 rounded">
-                          PENDING
+                      </div>
+
+                      <p className="text-[10px] text-zinc-400 leading-normal mb-2 min-h-[28px] line-clamp-2">{agent.message}</p>
+                      
+                      <div className="border-t border-zinc-900 pt-2 flex items-center justify-between text-[9px] font-mono text-zinc-500">
+                        <span>Status:</span>
+                        <span className={agent.status === "running" ? "text-[#76B900]" : agent.status === "done" ? "text-zinc-400" : ""}>
+                          {agent.progress}
                         </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
-                        agent.status === "running" ? "bg-[#76B900]/10 text-[#76B900] border-[#76B900]/30" : 
-                        agent.status === "done" ? "bg-[#76B900]/5 text-[#76B900] border-[#76B900]/20" : 
-                        "bg-zinc-900 text-zinc-400 border-zinc-800"
-                      }`}>
-                        {getAgentIcon(agent.name)}
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-zinc-500 font-mono">Agent {index + 1}</div>
-                        <h3 className="text-xs font-bold text-zinc-200">{agent.name}</h3>
                       </div>
                     </div>
-
-                    <p className="text-[11px] text-zinc-400 leading-normal mb-3 min-h-[32px]">{agent.message}</p>
-                    
-                    {/* Progress details */}
-                    <div className="border-t border-zinc-900 pt-2.5 flex items-center justify-between text-[10px] font-mono text-zinc-500">
-                      <span>Status:</span>
-                      <span className={agent.status === "running" ? "text-[#76B900]" : agent.status === "done" ? "text-zinc-400" : ""}>
-                        {agent.progress}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
-            {/* LIVE STREAMING TERMINAL CONSOLE */}
             <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-64">
               <div className="bg-zinc-900/60 border-b border-zinc-900 px-4 py-2 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-mono text-zinc-400">
@@ -592,13 +616,18 @@ export default function Home() {
                   <div className="text-zinc-600 italic">Console idle. Trigger a lead audit search to start logging events...</div>
                 ) : (
                   logs.map((log, idx) => {
-                    // Color code based on AgentPrefix
                     let color = "text-zinc-400";
                     if (log.includes("[Lead Discovery]")) color = "text-[#76B900]/90";
                     else if (log.includes("[Website Audit]")) color = "text-cyan-400/90";
                     else if (log.includes("[Opportunity Scoring]")) color = "text-amber-400/90";
                     else if (log.includes("[Outreach Generation]")) color = "text-fuchsia-400/90";
                     else if (log.includes("[CRM Storage]")) color = "text-sky-400/90";
+                    else if (log.includes("[PRD Generation]")) color = "text-emerald-400/90";
+                    else if (log.includes("[Frontend Generation]")) color = "text-violet-400/90";
+                    else if (log.includes("[Backend Schema]")) color = "text-orange-400/90";
+                    else if (log.includes("[Build]")) color = "text-yellow-400/90";
+                    else if (log.includes("[Deploy]")) color = "text-pink-400/90";
+                    else if (log.includes("[Notify]")) color = "text-teal-400/90";
                     else if (log.includes("[System]")) color = "text-white font-semibold";
                     else if (log.includes("[System Error]")) color = "text-red-500 font-bold";
 
@@ -613,11 +642,9 @@ export default function Home() {
               </div>
             </div>
 
-            {/* RESULTS DASHBOARD */}
             {leads.length > 0 && (
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 border-t border-zinc-900 pt-8">
                 
-                {/* Leads List Sidebar */}
                 <div className="lg:col-span-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-zinc-400 tracking-wider uppercase">Discovered CRM Leads ({leads.length})</h2>
@@ -636,7 +663,6 @@ export default function Home() {
                     {leads.map((lead) => {
                       const isSelected = selectedLead?.id === lead.id;
                       
-                      // Priority color codes
                       let badgeColor = "bg-zinc-900 border-zinc-800 text-zinc-400";
                       if (lead.priority_tier === "HOT") badgeColor = "bg-red-950/20 border-red-900/40 text-red-400";
                       else if (lead.priority_tier === "WARM") badgeColor = "bg-amber-950/20 border-amber-900/40 text-amber-400";
@@ -670,6 +696,13 @@ export default function Home() {
                             <span className="font-semibold text-zinc-300">Score: {lead.opportunity_score}</span>
                           </div>
                           
+                          {lead.human_approved && (
+                            <div className="mt-1.5 text-[9px] font-mono text-[#76B900] border border-[#76B900]/30 bg-[#76B900]/5 rounded px-1.5 py-0.5 inline-flex items-center gap-1">
+                              <ThumbsUp className="w-3 h-3" />
+                              <span>Approved for Build</span>
+                            </div>
+                          )}
+                          
                           {lead.is_duplicate && (
                             <div className="mt-1.5 text-[9px] font-mono text-zinc-500 border border-zinc-800/80 bg-zinc-950/40 rounded px-1.5 py-0.5 inline-block">
                               Duplicate Lead (Skipped Storage)
@@ -681,12 +714,10 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Lead Enriched CRM Details & Outreach Messaging Tabs */}
                 <div className="lg:col-span-8 space-y-6">
                   {selectedLead ? (
                     <div className="bg-zinc-900/30 border border-zinc-900 rounded-2xl p-6 space-y-6">
                       
-                      {/* Business Header Info */}
                       <div className="flex flex-col sm:flex-row justify-between gap-4 border-b border-zinc-900 pb-5">
                         <div className="space-y-1">
                           <div className="text-xs text-[#76B900] font-mono uppercase tracking-wider">{selectedLead.category || "Lead Profile"}</div>
@@ -708,7 +739,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Visual Scoring Wheel */}
                         <div className="flex items-center gap-4 bg-zinc-950/60 border border-zinc-800 p-3 rounded-xl min-w-[150px] justify-center">
                           <div className="text-center">
                             <div className="text-2xl font-bold font-mono text-[#76B900]">
@@ -728,7 +758,84 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* Technical Website Audit Details */}
+                      {/* Human Approval Section */}
+                      {(selectedLead.priority_tier === "HOT" || selectedLead.priority_tier === "WARM") && !selectedLead.human_approved && (
+                        <div className="bg-zinc-950/60 border border-[#76B900]/30 p-5 rounded-xl space-y-3">
+                          <div className="flex items-center gap-2">
+                            <ThumbsUp className="w-5 h-5 text-[#76B900]" />
+                            <h3 className="text-sm font-bold text-zinc-200">Human Gate: Approve for Build Pipeline</h3>
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            Review this lead's profile above. If you want to build a website for this business, click below to trigger the Scalix-style build pipeline (PRD → Stitch → Schema → Build → Deploy → Notify).
+                          </p>
+                          <button
+                            onClick={() => handleApprove(selectedLead.id)}
+                            disabled={approvingId !== null}
+                            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#76B900] to-[#598c00] hover:from-[#85cf00] hover:to-[#65a000] text-black font-bold text-xs flex items-center gap-2 shadow-[0_0_20px_rgba(118,185,0,0.2)] disabled:opacity-50"
+                          >
+                            {approvingId === selectedLead.id ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                                <span>Starting Build...</span>
+                              </>
+                            ) : (
+                              <>
+                                <ThumbsUp className="w-4 h-4" />
+                                <span>Approve & Build Website</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Build Results Section */}
+                      {selectedLead.human_approved && (
+                        <div className="bg-zinc-950/60 border border-[#76B900]/20 p-5 rounded-xl space-y-4">
+                          <h3 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                            <Rocket className="w-4 h-4 text-[#76B900]" />
+                            <span>Build Pipeline Results</span>
+                          </h3>
+                          
+                          {selectedLead.preview_url && (
+                            <div className="flex items-center justify-between bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/50">
+                              <span className="text-xs text-zinc-400 font-mono">Preview URL</span>
+                              <a href={selectedLead.preview_url} target="_blank" rel="noreferrer" className="text-xs text-[#76B900] hover:underline flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" />
+                                {selectedLead.preview_url}
+                              </a>
+                            </div>
+                          )}
+                          
+                          {selectedLead.github_repo_url && (
+                            <div className="flex items-center justify-between bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/50">
+                              <span className="text-xs text-zinc-400 font-mono">GitHub Repo</span>
+                              <a href={selectedLead.github_repo_url} target="_blank" rel="noreferrer" className="text-xs text-[#76B900] hover:underline flex items-center gap-1">
+                                <GitBranch className="w-3 h-3" />
+                                {selectedLead.github_repo_url}
+                              </a>
+                            </div>
+                          )}
+                          
+                          {selectedLead.prd_markdown && (
+                            <div className="space-y-1.5">
+                              <span className="text-xs text-zinc-400 font-mono block">PRD Document</span>
+                              <pre className="text-[10px] text-zinc-300 bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/50 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono leading-relaxed">
+                                {selectedLead.prd_markdown}
+                              </pre>
+                            </div>
+                          )}
+                          
+                          {selectedLead.repo_structure && (
+                            <div className="space-y-1.5">
+                              <span className="text-xs text-zinc-400 font-mono block">Repo Structure</span>
+                              <pre className="text-[10px] text-zinc-300 bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/50 whitespace-pre-wrap max-h-32 overflow-y-auto font-mono leading-relaxed">
+                                {selectedLead.repo_structure}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="space-y-2.5 bg-zinc-950/60 border border-zinc-900 p-4 rounded-xl">
                         <h3 className="text-xs font-bold text-zinc-300 flex items-center gap-2">
                           <Globe className="w-4 h-4 text-[#76B900]" />
@@ -775,15 +882,13 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* Outreach Templates Section */}
-                      {selectedLead.priority_tier === "HOT" || selectedLead.priority_tier === "WARM" ? (
+                      {(selectedLead.priority_tier === "HOT" || selectedLead.priority_tier === "WARM") ? (
                         <div className="space-y-4">
                           <h3 className="text-xs font-bold text-zinc-300 flex items-center gap-2">
                             <FileText className="w-4 h-4 text-[#76B900]" />
                             <span>Outreach Campaign Messaging Templates</span>
                           </h3>
 
-                          {/* Channel Select Tabs */}
                           <div className="flex border-b border-zinc-900 text-xs">
                             {(["whatsapp", "email", "linkedin", "facebook"] as const).map((ch) => {
                               const isContacted = (selectedLead.contacted_channels || []).includes(ch);
@@ -804,7 +909,6 @@ export default function Home() {
                             })}
                           </div>
 
-                          {/* Message Body Display */}
                           <div className="bg-zinc-950 border border-zinc-900 p-4 rounded-xl space-y-4 relative">
                             {selectedLead.outreach_messages.find(m => m.channel === outreachTab) ? (
                               <>
