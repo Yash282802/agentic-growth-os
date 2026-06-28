@@ -22,7 +22,8 @@ class NvidiaClient:
         model: str,
         messages: List[Dict[str, str]],
         temperature: float = 0.2,
-        max_tokens: int = 1024
+        max_tokens: int = 1024,
+        timeout: float = 15.0
     ) -> str:
         """
         Sends a request to NVIDIA NIM API. Falls back to mock responses if key is missing or request fails.
@@ -43,7 +44,7 @@ class NvidiaClient:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=headers,

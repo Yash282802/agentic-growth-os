@@ -32,7 +32,8 @@ Output in markdown."""
             prd = await nvidia.get_chat_completion(
                 model="meta/llama-3.3-70b-instruct",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=2048
+                max_tokens=2048,
+                timeout=60.0
             )
             lead["prd_markdown"] = prd
             log_callback(f"PRD generated for {biz}")
@@ -66,7 +67,8 @@ ONLY output the full TypeScript code, no explanations."""
             code = await nvidia.get_chat_completion(
                 model="meta/llama-3.3-70b-instruct",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=3072
+                max_tokens=3072,
+                timeout=60.0
             )
             lead["page_code"] = code
             lead["screen_list"] = ["Home", "About", "Services", "Contact"]
@@ -98,7 +100,8 @@ Output ONLY the Python code, no explanations."""
             code = await nvidia.get_chat_completion(
                 model="meta/llama-3.3-70b-instruct",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=2048
+                max_tokens=2048,
+                timeout=60.0
             )
             lead["backend_code"] = code
             lead["endpoints"] = ["POST /api/contact", "POST /api/bookings", "GET /api/health"]
@@ -221,7 +224,8 @@ class DeployAgent(AgentIQAgent):
                             "name": repo_name,
                             "gitSource": {
                                 "type": "github",
-                                "repoId": repo_url.replace("https://github.com/", "")
+                                "repoId": repo_url.replace("https://github.com/", ""),
+                                "ref": "main"
                             },
                             "target": "production"
                         }
