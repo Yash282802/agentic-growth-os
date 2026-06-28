@@ -51,7 +51,7 @@ interface AgentState {
   message: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = "https://backend-production-9c52.up.railway.app";
 
 export default function Home() {
   const [niche, setNiche] = useState("Hair Salons");
