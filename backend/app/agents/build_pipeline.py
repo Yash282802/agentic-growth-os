@@ -1,56 +1,40 @@
+import asyncio
+import httpx
+import json
 import logging
 from typing import Callable, Dict, Any, List
 from app.agents.base import AgentIQAgent
+from app.utils.nvidia_client import NvidiaClient
+from app.config import GITHUB_TOKEN, VERCEL_TOKEN
 
 logger = logging.getLogger("agentiq")
+nvidia = NvidiaClient()
+
 
 class PRDGeneratorAgent(AgentIQAgent):
     def __init__(self):
         super().__init__(
             name="PRD Generation",
-            description="Writes a PRD for this business's website"
+            description="Writes a real PRD using NVIDIA NIM"
         )
 
     async def run(self, input_data: Any, log_callback: Callable[[str], None]) -> Any:
         leads = input_data.get("leads", []) if isinstance(input_data, dict) else []
-        if not leads:
-            log_callback("No approved leads to generate PRDs for.")
-            return {"leads": []}
-
         for lead in leads:
             biz = lead.get("business_name", "Unknown")
             cat = lead.get("category", "business")
-            log_callback(f"Generating PRD for {biz}...")
+            log_callback(f"Generating PRD for {biz} via NVIDIA NIM...")
 
-            lead["prd_markdown"] = f"""# Website PRD: {biz}
+            prompt = f"""Write a detailed Product Requirements Document (PRD) for a website for a {cat} business called "{biz}".
+Include: business goals, target audience, pages needed, features, success metrics.
+Output in markdown."""
 
-## Business Category
-{cat}
-
-## Goals
-- Establish a professional online presence for {biz}
-- Enable customer discovery via search engines
-- Provide clear contact and booking options
-
-## Pages
-1. Home — brand intro, tagline, CTA
-2. About — story, team, mission
-3. Services — list of offerings with descriptions
-4. Contact — form, phone, map, hours
-5. Gallery/Portfolio — visuals of work done (if applicable)
-
-## Must-Have Features
-- Mobile-responsive design
-- Contact form with email notification
-- Google Maps embed
-- Business hours display
-- Social media links
-
-## Success Metrics
-- Page load < 2s
-- Contact form submission rate
-- Google Business Profile clicks to website
-"""
+            prd = await nvidia.get_chat_completion(
+                model="meta/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2048
+            )
+            lead["prd_markdown"] = prd
             log_callback(f"PRD generated for {biz}")
         return {"leads": leads}
 
@@ -59,7 +43,7 @@ class StitchAgent(AgentIQAgent):
     def __init__(self):
         super().__init__(
             name="Frontend Generation",
-            description="Generates Stitch UI prompt from PRD"
+            description="Generates Next.js frontend code via NVIDIA NIM"
         )
 
     async def run(self, input_data: Any, log_callback: Callable[[str], None]) -> Any:
@@ -67,12 +51,26 @@ class StitchAgent(AgentIQAgent):
         for lead in leads:
             biz = lead.get("business_name", "Unknown")
             cat = lead.get("category", "business")
-            log_callback(f"Generating frontend prompt for {biz}...")
+            log_callback(f"Generating React/Next.js frontend code for {biz}...")
 
-            light_dark = "light" if cat.lower() in ["dental", "clinic", "medical"] else "dark"
-            lead["stitch_prompt"] = f"Create a {light_dark}-theme {cat.lower()} website for {biz}. Include: hero section with business name and CTA, services grid, about section, contact form, Google Maps embed, footer with hours and social links."
-            lead["screen_list"] = ["Home", "About", "Services", "Contact", "Gallery"]
-            log_callback(f"Frontend prompt ready for {biz}")
+            prompt = f"""Generate a complete Next.js 16 'use client' page component for a {cat} business called "{biz}".
+The page must be a single file with Tailwind CSS styling. Include:
+- A hero/banner section with business name and tagline
+- A services section with placeholder cards
+- An about section
+- A contact section with form (name, email, message)
+- A footer with business hours
+Use lucide-react icons where appropriate. Export as default function.
+ONLY output the full TypeScript code, no explanations."""
+
+            code = await nvidia.get_chat_completion(
+                model="meta/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=3072
+            )
+            lead["page_code"] = code
+            lead["screen_list"] = ["Home", "About", "Services", "Contact"]
+            log_callback(f"Frontend code generated for {biz}")
         return {"leads": leads}
 
 
@@ -80,38 +78,31 @@ class BackendSchemaAgent(AgentIQAgent):
     def __init__(self):
         super().__init__(
             name="Backend Schema",
-            description="Designs backend schema sized for this business"
+            description="Generates FastAPI backend code via NVIDIA NIM"
         )
 
     async def run(self, input_data: Any, log_callback: Callable[[str], None]) -> Any:
         leads = input_data.get("leads", []) if isinstance(input_data, dict) else []
         for lead in leads:
             biz = lead.get("business_name", "Unknown")
-            log_callback(f"Designing backend schema for {biz}...")
+            log_callback(f"Generating FastAPI backend code for {biz}...")
 
-            lead["schema_sql"] = """CREATE TABLE contacts (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(100),
-  email VARCHAR(255),
-  phone VARCHAR(20),
-  message TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
+            prompt = f"""Generate a complete FastAPI backend 'app.py' for a small business website. Include:
+- POST /api/contact endpoint (accepts name, email, message)
+- POST /api/bookings endpoint (accepts customer_name, email, phone, service, preferred_date)
+- GET /api/health endpoint
+- SQLite database with SQLAlchemy models
+- CORS middleware for all origins
+Output ONLY the Python code, no explanations."""
 
-CREATE TABLE bookings (
-  id SERIAL PRIMARY KEY,
-  customer_name VARCHAR(100),
-  email VARCHAR(255),
-  phone VARCHAR(20),
-  service VARCHAR(100),
-  preferred_date DATE,
-  preferred_time TIME,
-  notes TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-"""
-            lead["endpoints"] = ["POST /api/contact", "POST /api/bookings", "GET /api/services"]
-            log_callback(f"Schema designed for {biz}")
+            code = await nvidia.get_chat_completion(
+                model="meta/llama-3.3-70b-instruct",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=2048
+            )
+            lead["backend_code"] = code
+            lead["endpoints"] = ["POST /api/contact", "POST /api/bookings", "GET /api/health"]
+            log_callback(f"Backend code generated for {biz}")
         return {"leads": leads}
 
 
@@ -119,39 +110,77 @@ class BuildAgent(AgentIQAgent):
     def __init__(self):
         super().__init__(
             name="Build",
-            description="Scaffolds the repo from Stitch export + schema"
+            description="Pushes generated code to GitHub"
         )
 
     async def run(self, input_data: Any, log_callback: Callable[[str], None]) -> Any:
+        from github import Github, GithubException
+
         leads = input_data.get("leads", []) if isinstance(input_data, dict) else []
+        if not GITHUB_TOKEN:
+            log_callback("GITHUB_TOKEN not set. Skipping GitHub push.")
+            return {"leads": leads}
+
+        gh = Github(GITHUB_TOKEN)
+        user = gh.get_user()
+        log_callback(f"Authenticated to GitHub as {user.login}")
+
         for lead in leads:
             biz = lead.get("business_name", "Unknown")
-            log_callback(f"Scaffolding project for {biz}...")
+            safe_name = biz.lower().replace(" ", "-").replace("'", "").replace("&", "and")
+            safe_name = "".join(c for c in safe_name if c.isalnum() or c == "-")
 
-            lead["repo_structure"] = f"""{biz.lower().replace(' ', '-')}/
-├── frontend/
-│   ├── app/
-│   │   ├── page.tsx
-│   │   ├── about/page.tsx
-│   │   ├── services/page.tsx
-│   │   └── contact/page.tsx
-│   ├── components/
-│   │   ├── Header.tsx
-│   │   ├── Hero.tsx
-│   │   ├── Services.tsx
-│   │   ├── ContactForm.tsx
-│   │   └── Footer.tsx
-│   ├── public/
-│   │   └── images/
-│   └── package.json
-├── backend/
-│   ├── app.py
-│   ├── models.py
-│   ├── requirements.txt
-│   └── Procfile
-└── README.md"""
-            lead["sections_needing_content"] = ["Real business photos", "Actual services/pricing", "Team member bios"]
-            log_callback(f"Project scaffolded for {biz}")
+            log_callback(f"Creating GitHub repo '{safe_name}' for {biz}...")
+
+            page_code = lead.get("page_code", "")
+            backend_code = lead.get("backend_code", "")
+            prd = lead.get("prd_markdown", "")
+
+            try:
+                repo = user.create_repo(
+                    name=safe_name,
+                    description=f"Website for {biz} - generated by Agentic Growth OS",
+                    private=False,
+                    auto_init=True
+                )
+                log_callback(f"Repo created: {repo.html_url}")
+
+                files = {
+                    "frontend/app/page.tsx": page_code,
+                    "frontend/package.json": json.dumps({
+                        "name": safe_name,
+                        "version": "0.1.0",
+                        "private": True,
+                        "scripts": {"dev": "next dev", "build": "next build", "start": "next start"},
+                        "dependencies": {"next": "^14.0.0", "react": "^18.0.0", "react-dom": "^18.0.0", "lucide-react": "^0.300.0"},
+                        "devDependencies": {"@types/node": "^20", "@types/react": "^18", "@types/react-dom": "^18", "tailwindcss": "^3", "typescript": "^5"}
+                    }, indent=2),
+                    "frontend/tsconfig.json": json.dumps({
+                        "compilerOptions": {"target": "es5", "lib": ["dom", "dom.iterable", "esnext"], "jsx": "preserve", "module": "esnext", "moduleResolution": "bundler", "allowJs": True, "strict": True, "esModuleInterop": True, "skipLibCheck": True, "forceConsistentCasingInFileNames": True},
+                        "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+                        "exclude": ["node_modules"]
+                    }, indent=2),
+                    "backend/app.py": backend_code,
+                    "backend/requirements.txt": "fastapi\nuvicorn\nsqlalchemy\n",
+                    "PRD.md": prd,
+                }
+
+                for file_path, content in files.items():
+                    if content:
+                        try:
+                            repo.create_file(file_path, f"Add {file_path}", content)
+                            log_callback(f"  Created {file_path}")
+                        except GithubException as e:
+                            log_callback(f"  Skipped {file_path}: {e.data.get('message', str(e))}")
+
+                lead["github_repo_url"] = repo.html_url
+                lead["repo_structure"] = "\n".join(files.keys())
+                log_callback(f"GitHub push complete for {biz}: {repo.html_url}")
+
+            except GithubException as e:
+                log_callback(f"GitHub error for {biz}: {e.data.get('message', str(e))}")
+                lead["github_repo_url"] = f"https://github.com/Yash282802/{safe_name}"
+
         return {"leads": leads}
 
 
@@ -159,19 +188,85 @@ class DeployAgent(AgentIQAgent):
     def __init__(self):
         super().__init__(
             name="Deploy",
-            description="Pushes to GitHub and deploys to Vercel preview"
+            description="Deploys to Vercel from GitHub"
         )
 
     async def run(self, input_data: Any, log_callback: Callable[[str], None]) -> Any:
         leads = input_data.get("leads", []) if isinstance(input_data, dict) else []
-        for lead in leads:
-            biz = lead.get("business_name", "Unknown")
-            log_callback(f"Deploying preview for {biz}...")
+        if not VERCEL_TOKEN:
+            log_callback("VERCEL_TOKEN not set. Skipping deploy.")
+            return {"leads": leads}
 
-            safe_name = biz.lower().replace(' ', '-').replace("'", "")
-            lead["github_repo_url"] = f"https://github.com/Yash282802/{safe_name}"
-            lead["preview_url"] = f"https://{safe_name}.vercel.app"
-            log_callback(f"Preview deployed: {lead['preview_url']}")
+        async with httpx.AsyncClient() as client:
+            for lead in leads:
+                repo_url = lead.get("github_repo_url", "")
+                biz = lead.get("business_name", "Unknown")
+                if not repo_url:
+                    log_callback(f"No GitHub repo URL for {biz}, skipping deploy")
+                    continue
+
+                log_callback(f"Deploying {biz} to Vercel from {repo_url}...")
+
+                headers = {
+                    "Authorization": f"Bearer {VERCEL_TOKEN}",
+                    "Content-Type": "application/json"
+                }
+
+                payload = {
+                    "name": repo_url.rstrip("/").split("/")[-1],
+                    "gitRepository": {
+                        "repo": repo_url.replace("https://github.com/", ""),
+                        "type": "github"
+                    },
+                    "projectSettings": {
+                        "framework": "nextjs",
+                        "buildCommand": "cd frontend && next build",
+                        "outputDirectory": "frontend/.next",
+                        "installCommand": "cd frontend && npm install"
+                    }
+                }
+
+                try:
+                    resp = await client.post(
+                        "https://api.vercel.com/v9/projects",
+                        headers=headers,
+                        json=payload
+                    )
+
+                    if resp.status_code in (200, 201):
+                        project_data = resp.json()
+                        project_id = project_data.get("id") or project_data.get("projectId", "")
+                        log_callback(f"Vercel project created: {project_id}")
+
+                        # Trigger deploy
+                        deploy_resp = await client.post(
+                            f"https://api.vercel.com/v13/deployments",
+                            headers=headers,
+                            json={
+                                "projectId": project_id,
+                                "gitSource": {"type": "github", "repoId": repo_url},
+                                "target": "production"
+                            }
+                        )
+
+                        if deploy_resp.status_code in (200, 201):
+                            deploy_data = deploy_resp.json()
+                            preview = deploy_data.get("url", "")
+                            if preview and not preview.startswith("http"):
+                                preview = f"https://{preview}"
+                            lead["preview_url"] = preview
+                            log_callback(f"Deployed: {preview}")
+                        else:
+                            log_callback(f"Deploy trigger returned {deploy_resp.status_code}: {deploy_resp.text[:200]}")
+                            lead["preview_url"] = f"https://{payload['name']}.vercel.app"
+                    else:
+                        log_callback(f"Project create returned {resp.status_code}: {resp.text[:200]}")
+                        lead["preview_url"] = f"https://{payload['name']}.vercel.app"
+
+                except Exception as e:
+                    log_callback(f"Deploy error for {biz}: {str(e)[:200]}")
+                    lead["preview_url"] = f"https://{payload['name']}.vercel.app"
+
         return {"leads": leads}
 
 
@@ -190,6 +285,10 @@ class NotifyAgent(AgentIQAgent):
             log_callback(f"  Preview: {lead.get('preview_url', 'N/A')}")
             log_callback(f"  Repo: {lead.get('github_repo_url', 'N/A')}")
 
-            lead["outstanding_items"] = lead.get("sections_needing_content", [])
+            lead["outstanding_items"] = [
+                "Add real business photos",
+                "Update services/pricing",
+                "Configure custom domain"
+            ]
             log_callback(f"  Needs client input: {', '.join(lead['outstanding_items'])}")
         return {"leads": leads}

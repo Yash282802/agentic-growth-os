@@ -8,6 +8,11 @@ load_dotenv()
 APP_NAME = "Agentic Growth OS"
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 
+# Build Pipeline Credentials
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+VERCEL_TOKEN = os.getenv("VERCEL_TOKEN", "")
+VERCEL_TEAM_ID = os.getenv("VERCEL_TEAM_ID", "")
+
 # NVIDIA Stack Configuration
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_API_BASE = os.getenv("NVIDIA_API_BASE", "https://integrate.api.nvidia.com/v1")
@@ -17,6 +22,7 @@ MODEL_OUTREACH = "meta/llama-3.3-70b-instruct"
 MODEL_SCORING = "meta/llama-3.3-70b-instruct"
 MODEL_AUDIT = "mistralai/mixtral-8x7b-instruct"
 MODEL_EMBEDDING = "nvidia/nv-embedqa-e5-v5"
+MODEL_CODE = "meta/llama-3.3-70b-instruct"
 
 # Google Places Configuration
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
