@@ -53,11 +53,10 @@ class NvidiaClient:
                     data = response.json()
                     return data["choices"][0]["message"]["content"]
                 else:
-                    logger.error(f"NVIDIA API Error ({response.status_code}): {response.text}")
-                    # Fallback on failure
+                    logger.error(f"NVIDIA API Error ({response.status_code}): {response.text[:300]}")
                     return self._generate_mock_completion(model, messages)
         except Exception as e:
-            logger.error(f"NVIDIA API exception: {str(e)}")
+            logger.error(f"NVIDIA API exception ({type(e).__name__}): {str(e)}", exc_info=True)
             return self._generate_mock_completion(model, messages)
 
     async def get_embeddings(self, text: str) -> List[float]:

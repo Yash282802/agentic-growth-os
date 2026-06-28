@@ -197,75 +197,50 @@ class DeployAgent(AgentIQAgent):
             log_callback("VERCEL_TOKEN not set. Skipping deploy.")
             return {"leads": leads}
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             for lead in leads:
                 repo_url = lead.get("github_repo_url", "")
                 biz = lead.get("business_name", "Unknown")
+                repo_name = repo_url.rstrip("/").split("/")[-1]
                 if not repo_url:
                     log_callback(f"No GitHub repo URL for {biz}, skipping deploy")
                     continue
 
-                log_callback(f"Deploying {biz} to Vercel from {repo_url}...")
+                log_callback(f"Deploying {biz} to Vercel...")
 
                 headers = {
                     "Authorization": f"Bearer {VERCEL_TOKEN}",
                     "Content-Type": "application/json"
                 }
 
-                payload = {
-                    "name": repo_url.rstrip("/").split("/")[-1],
-                    "gitRepository": {
-                        "repo": repo_url.replace("https://github.com/", ""),
-                        "type": "github"
-                    },
-                    "projectSettings": {
-                        "framework": "nextjs",
-                        "buildCommand": "cd frontend && next build",
-                        "outputDirectory": "frontend/.next",
-                        "installCommand": "cd frontend && npm install"
-                    }
-                }
-
                 try:
                     resp = await client.post(
-                        "https://api.vercel.com/v9/projects",
+                        "https://api.vercel.com/v13/deployments",
                         headers=headers,
-                        json=payload
+                        json={
+                            "name": repo_name,
+                            "gitSource": {
+                                "type": "github",
+                                "repoId": repo_url.replace("https://github.com/", "")
+                            },
+                            "target": "production"
+                        }
                     )
 
                     if resp.status_code in (200, 201):
-                        project_data = resp.json()
-                        project_id = project_data.get("id") or project_data.get("projectId", "")
-                        log_callback(f"Vercel project created: {project_id}")
-
-                        # Trigger deploy
-                        deploy_resp = await client.post(
-                            f"https://api.vercel.com/v13/deployments",
-                            headers=headers,
-                            json={
-                                "projectId": project_id,
-                                "gitSource": {"type": "github", "repoId": repo_url},
-                                "target": "production"
-                            }
-                        )
-
-                        if deploy_resp.status_code in (200, 201):
-                            deploy_data = deploy_resp.json()
-                            preview = deploy_data.get("url", "")
-                            if preview and not preview.startswith("http"):
-                                preview = f"https://{preview}"
-                            lead["preview_url"] = preview
-                            log_callback(f"Deployed: {preview}")
-                        else:
-                            log_callback(f"Deploy trigger returned {deploy_resp.status_code}: {deploy_resp.text[:200]}")
-                            lead["preview_url"] = f"https://{payload['name']}.vercel.app"
+                        data = resp.json()
+                        preview = data.get("url", "")
+                        if preview and not preview.startswith("http"):
+                            preview = f"https://{preview}"
+                        lead["preview_url"] = preview
+                        log_callback(f"Deployed: {preview}")
                     else:
-                        log_callback(f"Project create returned {resp.status_code}: {resp.text[:200]}")
-                        lead["preview_url"] = f"https://{payload['name']}.vercel.app"
+                        log_callback(f"Vercel returned {resp.status_code}: {resp.text[:300]}")
+                        lead["preview_url"] = f"https://{repo_name}.vercel.app"
 
                 except Exception as e:
                     log_callback(f"Deploy error for {biz}: {str(e)[:200]}")
-                    lead["preview_url"] = f"https://{payload['name']}.vercel.app"
+                    lead["preview_url"] = f"https://{repo_name}.vercel.app"
 
         return {"leads": leads}
 
