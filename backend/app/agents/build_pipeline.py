@@ -68,7 +68,7 @@ ONLY output the full TypeScript code, no explanations."""
                 model="meta/llama-3.3-70b-instruct",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=3072,
-                timeout=60.0
+                timeout=120.0
             )
             lead["page_code"] = code
             lead["screen_list"] = ["Home", "About", "Services", "Contact"]
@@ -224,7 +224,8 @@ class DeployAgent(AgentIQAgent):
                             "name": repo_name,
                             "gitSource": {
                                 "type": "github",
-                                "repoId": repo_url.replace("https://github.com/", ""),
+                                "repo": repo_name,
+                                "owner": "Yash282802",
                                 "ref": "main"
                             },
                             "target": "production"
