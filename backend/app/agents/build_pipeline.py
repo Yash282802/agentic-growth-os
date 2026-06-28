@@ -54,21 +54,15 @@ class StitchAgent(AgentIQAgent):
             cat = lead.get("category", "business")
             log_callback(f"Generating React/Next.js frontend code for {biz}...")
 
-            prompt = f"""Generate a complete Next.js 16 'use client' page component for a {cat} business called "{biz}".
-The page must be a single file with Tailwind CSS styling. Include:
-- A hero/banner section with business name and tagline
-- A services section with placeholder cards
-- An about section
-- A contact section with form (name, email, message)
-- A footer with business hours
-Use lucide-react icons where appropriate. Export as default function.
-ONLY output the full TypeScript code, no explanations."""
+            prompt = f"""Generate a compact Next.js 'use client' page for a {cat} business called "{biz}".
+Tailwind CSS, single file, <200 lines. Include: hero with name, services cards, contact form, footer with hours.
+Use lucide-react icons. Export default function. ONLY output TypeScript code."""
 
             code = await nvidia.get_chat_completion(
                 model="meta/llama-3.3-70b-instruct",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=3072,
-                timeout=120.0
+                max_tokens=2048,
+                timeout=60.0
             )
             lead["page_code"] = code
             lead["screen_list"] = ["Home", "About", "Services", "Contact"]
@@ -152,7 +146,11 @@ class BuildAgent(AgentIQAgent):
                     break
                 except GithubException as e:
                     msg = e.data.get("message", str(e))
-                    if "name already exists" in msg or "already exists" in msg:
+                    errors = e.data.get("errors", [])
+                    err_str = str(e.data)
+                    exists = any("already" in (err.get("message","")+" "+err.get("field","")) for err in errors)
+                    exists |= "already exists" in err_str or "already_exists" in err_str
+                    if exists:
                         log_callback(f"  Name '{candidate}' taken, trying next...")
                         continue
                     log_callback(f"GitHub error for {biz}: {msg}")
