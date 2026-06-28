@@ -234,7 +234,7 @@ class DeployAgent(AgentIQAgent):
 
                 try:
                     resp = await client.post(
-                        "https://api.vercel.com/v13/deployments",
+                        "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1",
                         headers=headers,
                         json={
                             "name": repo_name,
