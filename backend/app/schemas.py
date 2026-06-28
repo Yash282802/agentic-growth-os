@@ -120,10 +120,10 @@ class LeadResponse(BaseModel):
     created_at: datetime
     outreach_messages: List[OutreachMessageResponse] = []
     human_approved: bool = False
-    prd_markdown: str = ""
-    repo_structure: str = ""
-    github_repo_url: str = ""
-    preview_url: str = ""
+    prd_markdown: Optional[str] = None
+    repo_structure: Optional[str] = None
+    github_repo_url: Optional[str] = None
+    preview_url: Optional[str] = None
 
     class Config:
         from_attributes = True
