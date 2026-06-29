@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from app.config import DATABASE_URL
+from app.config import DATABASE_URL as DB_URL
 
 logger = logging.getLogger("database")
 
@@ -9,19 +9,18 @@ logger = logging.getLogger("database")
 connect_args = {}
 engine_kwargs = {"pool_pre_ping": True, "pool_recycle": 300}
 
-if DATABASE_URL.startswith("sqlite"):
+if DB_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
     engine_kwargs = {}
-elif DATABASE_URL.startswith("postgresql"):
-    # Supabase requires SSL
-    if "sslmode" not in DATABASE_URL:
-        if "?" in DATABASE_URL:
-            DATABASE_URL += "&sslmode=require"
+elif DB_URL.startswith("postgresql"):
+    if "sslmode" not in DB_URL:
+        if "?" in DB_URL:
+            DB_URL += "&sslmode=require"
         else:
-            DATABASE_URL += "?sslmode=require"
+            DB_URL += "?sslmode=require"
 
 engine = create_engine(
-    DATABASE_URL,
+    DB_URL,
     connect_args=connect_args,
     **engine_kwargs
 )

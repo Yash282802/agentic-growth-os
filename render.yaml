@@ -3,20 +3,26 @@ services:
     name: agentic-growth-os-backend
     runtime: python
     repo: https://github.com/Yash282802/agentic-growth-os
+    sourceDir: backend
     plan: free
-    branch: main
-    rootDir: backend
-    healthCheckPath: /
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
       - key: DATABASE_URL
         sync: false
       - key: NVIDIA_API_KEY
         sync: false
       - key: GOOGLE_PLACES_API_KEY
         sync: false
-      - key: FRONTEND_URL
+      - key: GITHUB_TOKEN
         sync: false
-      - key: DEBUG
-        value: "false"
+      - key: VERCEL_TOKEN
+        sync: false
+      - key: VERCEL_TEAM_ID
+        sync: false
+      - key: FRONTEND_URL
+        value: https://agentic-growth-os-delta.vercel.app

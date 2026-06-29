@@ -53,7 +53,7 @@ interface AgentState {
   message: string;
 }
 
-const API_BASE = "https://backend-production-9c52.up.railway.app";
+const API_BASE = "https://agentic-growth-os-backend.onrender.com";
 
 const AGENT_CONFIGS: { name: string; icon: React.ReactNode; description: string; row: number; side?: "left" | "center" | "right" }[] = [
   { name: "Lead Discovery", icon: <Search className="w-5 h-5" />, description: "Discovers businesses via Google Places", row: 1, side: "center" },

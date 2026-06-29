@@ -37,3 +37,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+.vercel
+.env*
+
+# Railway
+.railway/
+railway.json
