@@ -5,7 +5,7 @@ import logging
 from typing import Callable, Dict, Any, List
 from app.agents.base import AgentIQAgent
 from app.utils.nvidia_client import NvidiaClient
-from app.config import GITHUB_TOKEN, VERCEL_TOKEN
+from app.config import GITHUB_TOKEN, VERCEL_TOKEN, VERCEL_TEAM_ID
 
 logger = logging.getLogger("agentiq")
 nvidia = NvidiaClient()
@@ -233,8 +233,11 @@ class DeployAgent(AgentIQAgent):
                 }
 
                 try:
+                    deploy_url = "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1"
+                    if VERCEL_TEAM_ID:
+                        deploy_url += f"&teamId={VERCEL_TEAM_ID}"
                     resp = await client.post(
-                        "https://api.vercel.com/v13/deployments?skipAutoDetectionConfirmation=1",
+                        deploy_url,
                         headers=headers,
                         json={
                             "name": repo_name,

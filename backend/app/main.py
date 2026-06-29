@@ -29,6 +29,7 @@ app = FastAPI(title=APP_NAME)
 CORS_ORIGINS = [
     FRONTEND_URL,
     "https://agentic-growth-os.vercel.app",
+    "https://agentic-growth-os-delta.vercel.app",
     "http://localhost:3000",
 ]
 app.add_middleware(
