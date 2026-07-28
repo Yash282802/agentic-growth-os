@@ -193,7 +193,7 @@ async def start_pipeline(request: RunRequest, background_tasks: BackgroundTasks,
     return {"session_id": session_id, "status": "RUNNING"}
 
 @app.post("/api/leads/approve")
-async def approve_lead(request: ApproveRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def approve_lead(request: ApproveRequest, db: Session = Depends(get_db)):
     lead = db.query(LeadModel).filter(LeadModel.id == request.lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found.")
@@ -201,16 +201,10 @@ async def approve_lead(request: ApproveRequest, background_tasks: BackgroundTask
     lead.human_approved = True
     db.commit()
 
-    session_id = lead.session_id
-    if session_id not in session_queues:
-        session_queues[session_id] = asyncio.Queue()
-
-    background_tasks.add_task(run_build_pipeline, session_id, [request.lead_id])
-
-    return {"status": "success", "message": "Lead approved. Build pipeline started."}
+    return {"status": "success", "message": "Lead approved.", "session_id": lead.session_id, "lead_id": lead.id}
 
 @app.post("/api/leads/{lead_id}/approve")
-async def approve_lead_legacy(lead_id: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def approve_lead_legacy(lead_id: str, db: Session = Depends(get_db)):
     lead = db.query(LeadModel).filter(LeadModel.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found.")
@@ -218,13 +212,21 @@ async def approve_lead_legacy(lead_id: str, background_tasks: BackgroundTasks, d
     lead.human_approved = True
     db.commit()
 
+    return {"status": "success", "message": "Lead approved.", "session_id": lead.session_id, "lead_id": lead.id}
+
+@app.post("/api/build/start")
+async def start_build(request: ApproveRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    lead = db.query(LeadModel).filter(LeadModel.id == request.lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found.")
+
     session_id = lead.session_id
     if session_id not in session_queues:
         session_queues[session_id] = asyncio.Queue()
 
-    background_tasks.add_task(run_build_pipeline, session_id, [lead_id])
+    background_tasks.add_task(run_build_pipeline, session_id, [request.lead_id])
 
-    return {"status": "success", "message": "Lead approved. Build pipeline started."}
+    return {"status": "success", "message": "Build pipeline started.", "session_id": session_id}
 
 @app.get("/api/stream/{session_id}")
 async def stream_session_logs(session_id: str):

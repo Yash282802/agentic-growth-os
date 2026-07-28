@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, Globe, TrendingUp, FileText, Database,
   Terminal as TermIcon, Download, Clipboard, Check, RefreshCw,
@@ -61,12 +62,6 @@ const AGENT_CONFIGS: { name: string; icon: React.ReactNode; description: string;
   { name: "Opportunity Scoring", icon: <TrendingUp className="w-5 h-5" />, description: "Multi-factor rubric out of 100", row: 3, side: "center" },
   { name: "Outreach Generation", icon: <FileText className="w-5 h-5" />, description: "Personalized copy for 4 channels", row: 3, side: "right" },
   { name: "CRM Storage", icon: <Database className="w-5 h-5" />, description: "E5 embeddings + DB deduplication", row: 3, side: "left" },
-  { name: "PRD Generation", icon: <FileText className="w-5 h-5" />, description: "Writes PRD for approved leads", row: 4, side: "center" },
-  { name: "Frontend Generation", icon: <Code className="w-5 h-5" />, description: "Generates Next.js UI from PRD", row: 5, side: "left" },
-  { name: "Backend Schema", icon: <Database className="w-5 h-5" />, description: "FastAPI backend schema", row: 5, side: "center" },
-  { name: "Build", icon: <GitBranch className="w-5 h-5" />, description: "Scaffolds repo from templates", row: 5, side: "right" },
-  { name: "Deploy", icon: <Rocket className="w-5 h-5" />, description: "GitHub + Vercel preview", row: 6, side: "center" },
-  { name: "Notify", icon: <Bell className="w-5 h-5" />, description: "Summarizes done & outstanding", row: 7, side: "center" },
 ];
 
 const AGENT_ORDER = AGENT_CONFIGS.map(a => a.name);
@@ -77,12 +72,6 @@ const NODE_GLOW: Record<string, string> = {
   "Opportunity Scoring": "shadow-[0_0_15px_rgba(168,85,247,0.3)] border-neon-purple",
   "Outreach Generation": "shadow-[0_0_15px_rgba(249,115,22,0.3)] border-neon-orange",
   "CRM Storage": "shadow-[0_0_15px_rgba(249,115,22,0.3)] border-neon-orange",
-  "PRD Generation": "shadow-[0_0_15px_rgba(59,130,246,0.3)] border-neon-blue/20",
-  "Frontend Generation": "shadow-[0_0_15px_rgba(59,130,246,0.3)] border-neon-blue/20",
-  "Backend Schema": "shadow-[0_0_15px_rgba(59,130,246,0.3)] border-neon-blue/20",
-  "Build": "shadow-[0_0_15px_rgba(59,130,246,0.3)] border-neon-blue/20",
-  "Deploy": "shadow-[0_0_15px_rgba(59,130,246,0.3)] border-neon-blue/20",
-  "Notify": "shadow-[0_0_15px_rgba(168,85,247,0.3)] border-neon-purple/20",
 };
 
 const NODE_ICON_COLOR: Record<string, string> = {
@@ -91,12 +80,6 @@ const NODE_ICON_COLOR: Record<string, string> = {
   "Opportunity Scoring": "text-neon-purple",
   "Outreach Generation": "text-neon-orange",
   "CRM Storage": "text-neon-orange",
-  "PRD Generation": "text-neon-blue/40",
-  "Frontend Generation": "text-neon-blue/40",
-  "Backend Schema": "text-neon-blue/40",
-  "Build": "text-neon-blue/40",
-  "Deploy": "text-neon-blue/40",
-  "Notify": "text-neon-purple/40",
 };
 
 const NODE_GLOW_BG: Record<string, string> = {
@@ -108,6 +91,7 @@ const NODE_GLOW_BG: Record<string, string> = {
 };
 
 export default function Home() {
+  const router = useRouter();
   const [niche, setNiche] = useState("Hair Salons");
   const [location, setLocation] = useState("Austin, Texas");
   const [maxLeads, setMaxLeads] = useState(10);
@@ -224,9 +208,6 @@ export default function Home() {
         es.close();
         setRunning(false);
         fetchHistory();
-      } else if (data.type === "build_complete") {
-        setLogs(prev => [...prev, "[System] Build pipeline completed! Refreshing lead details..."]);
-        fetchSessionDetails(sId);
       } else if (data.type === "error") {
         setLogs(prev => [...prev, `[System Error] Pipeline stopped: ${data.message}`]);
         es.close();
@@ -253,10 +234,10 @@ export default function Home() {
     try {
       const res = await fetch(`${API_BASE}/api/leads/${leadId}/approve`, { method: "POST", headers: { "Content-Type": "application/json" } });
       if (res.ok) {
-        setLogs(prev => [...prev, `[System] Build pipeline started for lead ${leadId.slice(0, 8)}...`]);
+        setLogs(prev => [...prev, `[System] Lead approved. Redirecting to build pipeline...`]);
         setLeads(prev => prev.map(l => l.id === leadId ? { ...l, human_approved: true } : l));
         setSelectedLead(prev => prev?.id === leadId ? { ...prev, human_approved: true } : prev);
-        if (sessionId) connectSSE(sessionId);
+        router.push(`/build?session=${sessionId}&lead=${leadId}`);
       }
     } catch (e) { setLogs(prev => [...prev, `[System Error] Failed to approve lead: ${e}`]); }
     finally { setApprovingId(null); }
@@ -288,12 +269,6 @@ export default function Home() {
     if (log.includes("[Opportunity Scoring]")) return "text-neon-purple/90";
     if (log.includes("[Outreach Generation]")) return "text-neon-orange/90";
     if (log.includes("[CRM Storage]")) return "text-neon-orange/90";
-    if (log.includes("[PRD Generation]")) return "text-neon-blue/90";
-    if (log.includes("[Frontend Generation]")) return "text-neon-blue/90";
-    if (log.includes("[Backend Schema]")) return "text-neon-blue/90";
-    if (log.includes("[Build]")) return "text-neon-blue/90";
-    if (log.includes("[Deploy]")) return "text-neon-blue/90";
-    if (log.includes("[Notify]")) return "text-neon-purple/90";
     if (log.includes("[System Error]")) return "text-red-400 font-bold";
     if (log.includes("[System]")) return "text-white font-semibold";
     return "text-gray-400";
@@ -521,10 +496,6 @@ export default function Home() {
                 <path className="path-flow" d="M 50% 120 L 50% 240 L 50% 360 L 50% 480" fill="none" stroke="url(#grad-green)" strokeWidth="1.5" />
                 <path d="M 50% 120 C 35% 150, 30% 350, 30% 380" fill="none" stroke="rgba(249, 115, 22, 0.2)" strokeWidth="1" />
                 <path d="M 50% 120 C 65% 150, 70% 350, 70% 380" fill="none" stroke="rgba(249, 115, 22, 0.2)" strokeWidth="1" />
-                <path d="M 50% 360 L 50% 480" fill="none" stroke="rgba(59, 130, 246, 0.1)" strokeWidth="1" />
-                <path d="M 50% 480 L 40% 600" fill="none" stroke="rgba(59, 130, 246, 0.1)" strokeWidth="1" />
-                <path d="M 50% 480 L 50% 600" fill="none" stroke="rgba(59, 130, 246, 0.1)" strokeWidth="1" />
-                <path d="M 50% 480 L 60% 600" fill="none" stroke="rgba(59, 130, 246, 0.1)" strokeWidth="1" />
               </svg>
 
               <div className="relative w-full h-full flex flex-col items-center justify-between py-4 max-w-2xl">
@@ -588,60 +559,11 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Row 4: PRD Generator */}
-                <div className="relative z-10 flex flex-col items-center -mt-4 neural-node">
-                  <div className={`w-16 h-16 rounded-full bg-black border-2 flex flex-col items-center justify-center relative ${agents.find(a => a.name === "PRD Generation")?.status === "running" ? "border-neon-blue/50" : agents.find(a => a.name === "PRD Generation")?.status === "done" ? "border-neon-blue/50" : "border-neon-blue/10"} ${agentOpacity("PRD Generation")}`}>
-                    <span className="absolute -top-2 -right-2 w-5 h-5 bg-os-dark-gray border border-os-border rounded-full flex items-center justify-center text-[10px] text-gray-400 font-bold">6</span>
-                    <FileText className="w-6 h-6 text-neon-blue/40 mb-1" />
-                  </div>
-                  <div className="mt-2 text-center">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">PRD Generator</p>
-                    {agentLabel("PRD Generation")}
-                  </div>
-                </div>
-
-                {/* Row 5: Frontend + Backend + Build */}
-                <div className="w-full flex justify-center items-center gap-12 relative -mt-4">
-                  {["Frontend Generation", "Backend Schema", "Build"].map((name, idx) => {
-                    const nums = [7, 8, 9];
-                    return (
-                      <div key={name} className={`flex flex-col items-center neural-node ${agentOpacity(name)}`}>
-                        <div className="w-14 h-14 rounded-full bg-black border-2 border-neon-blue/10 flex flex-col items-center justify-center relative">
-                          <span className="absolute -top-2 -right-2 w-4 h-4 bg-os-dark-gray border border-os-border rounded-full flex items-center justify-center text-[9px] text-gray-400 font-bold">{nums[idx]}</span>
-                          {name === "Frontend Generation" && <Code className="w-5 h-5 text-neon-blue/40 mb-1" />}
-                          {name === "Backend Schema" && <Database className="w-5 h-5 text-neon-blue/40 mb-1" />}
-                          {name === "Build" && <GitBranch className="w-5 h-5 text-neon-blue/40 mb-1" />}
-                        </div>
-                        <div className="mt-1 text-center">
-                          <p className="text-[9px] font-bold text-gray-500 uppercase">{name === "Frontend Generation" ? "Frontend Builder" : name === "Backend Schema" ? "Backend Builder" : "Build Agent"}</p>
-                          {agentLabel(name)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Row 6: Deploy */}
-                <div className="relative z-10 flex flex-col items-center -mt-4 neural-node">
-                  <div className={`w-16 h-16 rounded-full bg-black border-2 flex flex-col items-center justify-center relative ${agents.find(a => a.name === "Deploy")?.status === "running" || agents.find(a => a.name === "Deploy")?.status === "done" ? "border-neon-blue/50" : "border-neon-blue/10"} ${agentOpacity("Deploy")}`}>
-                    <span className="absolute -top-2 -right-2 w-5 h-5 bg-os-dark-gray border border-os-border rounded-full flex items-center justify-center text-[10px] text-gray-400 font-bold">10</span>
-                    <Rocket className="w-6 h-6 text-neon-blue/40 mb-1" />
-                  </div>
-                  <div className="mt-2 text-center">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Deployment Agent</p>
-                    {agentLabel("Deploy")}
-                  </div>
-                </div>
-
-                {/* Row 7: Notify */}
-                <div className="relative z-10 flex flex-col items-center -mt-4 neural-node">
-                  <div className={`w-16 h-16 rounded-full bg-black border-2 flex flex-col items-center justify-center relative ${agents.find(a => a.name === "Notify")?.status === "running" || agents.find(a => a.name === "Notify")?.status === "done" ? "border-neon-purple/50" : "border-neon-purple/10"} ${agentOpacity("Notify")}`}>
-                    <span className="absolute -top-2 -right-2 w-5 h-5 bg-os-dark-gray border border-os-border rounded-full flex items-center justify-center text-[10px] text-gray-400 font-bold">11</span>
-                    <Bell className="w-6 h-6 text-neon-purple/40 mb-1" />
-                  </div>
-                  <div className="mt-2 text-center">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter">Notification Agent</p>
-                    {agentLabel("Notify")}
+                {/* Build Pipeline hint */}
+                <div className="relative z-10 flex flex-col items-center -mt-2 opacity-40">
+                  <div className="px-4 py-2 rounded-xl border border-dashed border-neon-blue/30 bg-black/40 text-center">
+                    <p className="text-[10px] font-bold text-neon-blue uppercase tracking-wider">Build Pipeline</p>
+                    <p className="text-[9px] text-gray-500 mt-1">Unlocks after lead approval</p>
                   </div>
                 </div>
               </div>
