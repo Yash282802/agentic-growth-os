@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileText, Code, Database, GitBranch, Rocket, Bell,
-  Check, RefreshCw, ExternalLink, Zap, ArrowLeft, X
+  Check, ExternalLink, ArrowLeft
 } from "lucide-react";
 
 const API_BASE = "https://agentic-growth-os-backend.onrender.com";
@@ -16,16 +16,65 @@ interface AgentState {
   message: string;
 }
 
+interface BuildResult {
+  preview_url?: string;
+  github_repo_url?: string;
+}
+
 const BUILD_AGENTS = [
-  { name: "PRD Generation", icon: <FileText className="w-6 h-6" />, color: "neon-blue", num: 1 },
-  { name: "Frontend Generation", icon: <Code className="w-6 h-6" />, color: "neon-blue", num: 2 },
-  { name: "Backend Schema", icon: <Database className="w-6 h-6" />, color: "neon-blue", num: 3 },
-  { name: "Build", icon: <GitBranch className="w-6 h-6" />, color: "neon-blue", num: 4 },
-  { name: "Deploy", icon: <Rocket className="w-6 h-6" />, color: "neon-blue", num: 5 },
-  { name: "Notify", icon: <Bell className="w-6 h-6" />, color: "neon-purple", num: 6 },
+  { name: "PRD Generation", icon: <FileText className="w-5 h-5" />, num: 1 },
+  { name: "Frontend Generation", icon: <Code className="w-5 h-5" />, num: 2 },
+  { name: "Backend Schema", icon: <Database className="w-5 h-5" />, num: 3 },
+  { name: "Build", icon: <GitBranch className="w-5 h-5" />, num: 4 },
+  { name: "Deploy", icon: <Rocket className="w-5 h-5" />, num: 5 },
+  { name: "Notify", icon: <Bell className="w-5 h-5" />, num: 6 },
 ];
 
 const AGENT_ORDER = BUILD_AGENTS.map(a => a.name);
+
+const BUILD_LABEL: Record<string, string> = {
+  "PRD Generation": "PRD Generator",
+  "Frontend Generation": "Frontend Builder",
+  "Backend Schema": "Backend Builder",
+  "Build": "Build Agent",
+  "Deploy": "Deployment Agent",
+  "Notify": "Notification Agent",
+};
+
+function BuildNode({ name, icon, num, status }: { name: string; icon: React.ReactNode; num: number; status: AgentState["status"] }) {
+  const wrap =
+    status === "running" ? "border-[1.5px] border-berry bg-berry-soft"
+    : status === "failed" ? "border-red-400 bg-red-50"
+    : "border-line bg-panel";
+  const badge =
+    status === "running" ? "bg-berry border-berry text-white"
+    : status === "done" ? "bg-moss border-moss text-white"
+    : status === "failed" ? "bg-red-500 border-red-500 text-white"
+    : "border-wait text-muted";
+  const labelCls =
+    status === "running" ? "text-berry font-medium"
+    : status === "done" ? "text-moss"
+    : status === "failed" ? "text-red-600"
+    : "text-muted";
+  const titleCls = status === "idle" ? "text-muted" : "text-ink";
+  const text = status === "running" ? "Processing…" : status === "done" ? "Done" : status === "failed" ? "Failed" : "Waiting";
+
+  return (
+    <div className={`flex items-center gap-2.5 h-node px-3 border rounded-xl ${wrap}`}>
+      <span className={`flex-none w-6 h-6 rounded-full grid place-items-center text-xs font-semibold border ${badge}`}>
+        {status === "done" ? <Check className="w-3 h-3" /> : num}
+      </span>
+      <span className={`flex-none ${titleCls}`}>{icon}</span>
+      <span className="min-w-0 leading-tight">
+        <strong className={`block text-[13px] font-semibold truncate ${titleCls}`}>{BUILD_LABEL[name] || name}</strong>
+        <small className={`text-xs flex items-center gap-1.5 ${labelCls}`}>
+          {status === "running" && <i className="w-1.5 h-1.5 rounded-full bg-berry node-live-dot" />}
+          {text}
+        </small>
+      </span>
+    </div>
+  );
+}
 
 function BuildPageInner() {
   const router = useRouter();
@@ -39,7 +88,7 @@ function BuildPageInner() {
   const [logs, setLogs] = useState<string[]>([]);
   const [started, setStarted] = useState(false);
   const [buildDone, setBuildDone] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<BuildResult | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -63,8 +112,8 @@ function BuildPageInner() {
       });
       if (!res.ok) throw new Error("Failed to start build pipeline");
       connectSSE();
-    } catch (err: any) {
-      setLogs(prev => [...prev, `[System Error] ${err.message}`]);
+    } catch (err) {
+      setLogs(prev => [...prev, `[System Error] ${err instanceof Error ? err.message : String(err)}`]);
     }
   };
 
@@ -106,7 +155,7 @@ function BuildPageInner() {
       const res = await fetch(`${API_BASE}/api/session/${sessionId}`);
       if (res.ok) {
         const data = await res.json();
-        const lead = data.leads?.find((l: any) => l.id === leadId);
+        const lead = data.leads?.find((l: { id: string }) => l.id === leadId);
         if (lead) setResult(lead);
       }
     } catch (e) { console.error(e); }
@@ -114,176 +163,124 @@ function BuildPageInner() {
 
   const getAgent = (name: string) => agents.find(a => a.name === name);
 
-  const agentLabel = (name: string) => {
-    const a = getAgent(name);
-    if (!a || a.status === "idle") return <span className="text-[9px] text-neon-orange">Waiting</span>;
-    if (a.status === "running") return <span className="text-[9px] text-neon-green animate-pulse">Processing...</span>;
-    if (a.status === "done") return <span className="text-[9px] text-neon-green">Completed</span>;
-    return <span className="text-[9px] text-red-400">Failed</span>;
+  const groupDone = (names: string[]) => names.every(n => getAgent(n)?.status === "done");
+
+  const renderLog = (log: string) => {
+    const m = log.match(/^\[([^\]]+)\]\s*([\s\S]*)$/);
+    if (!m) return <span>{log}</span>;
+    const isError = /error/i.test(m[1]);
+    return (
+      <span>
+        <em className={`not-italic font-medium ${isError ? "text-red-600" : "text-moss"}`}>{m[1]}</em>{" "}
+        <span className={isError ? "text-red-600" : ""}>{m[2]}</span>
+      </span>
+    );
   };
 
-  const agentOpacity = (name: string) => {
-    const a = getAgent(name);
-    if (!a || a.status === "idle") return "opacity-40";
-    return "opacity-100";
-  };
+  const renderNodes = (names: string[]) => (
+    <>
+      {names.map(name => {
+        const c = BUILD_AGENTS.find(a => a.name === name)!;
+        return <BuildNode key={name} name={name} icon={c.icon} num={c.num} status={getAgent(name)?.status || "idle"} />;
+      })}
+    </>
+  );
 
-  const borderColor = (name: string) => {
-    const a = getAgent(name);
-    if (!a) return "border-neon-blue/20";
-    if (a.status === "running") return "border-neon-blue glow-blue";
-    if (a.status === "done") return "border-neon-green";
-    return "border-neon-blue/20";
-  };
+  const groups: { names: string[]; nodes: React.ReactNode }[] = [
+    { names: ["PRD Generation"], nodes: renderNodes(["PRD Generation"]) },
+    { names: ["Frontend Generation", "Backend Schema"], nodes: renderNodes(["Frontend Generation", "Backend Schema"]) },
+    { names: ["Build"], nodes: renderNodes(["Build"]) },
+    { names: ["Deploy"], nodes: renderNodes(["Deploy"]) },
+    { names: ["Notify"], nodes: renderNodes(["Notify"]) },
+  ];
 
   return (
-    <div className="h-screen flex flex-col bg-os-black text-gray-300 font-sans overflow-hidden selection:bg-neon-blue/30 selection:text-black">
-      <style>{`
-        .glass-panel { backdrop-filter: blur(12px); background: rgba(15, 15, 15, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); }
-        .glow-blue { box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
-        .terminal-scroll::-webkit-scrollbar { width: 4px; }
-        .terminal-scroll::-webkit-scrollbar-track { background: transparent; }
-        .terminal-scroll::-webkit-scrollbar-thumb { background: rgba(59, 130, 246, 0.2); border-radius: 2px; }
-      `}</style>
-
+    <div className="h-screen flex flex-col bg-canvas text-ink font-sans overflow-hidden min-w-[900px] selection:bg-moss/20">
       {/* Header */}
-      <header className="h-16 border-b border-os-border flex items-center justify-between px-6 z-50 bg-os-black/80 backdrop-blur-md shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push("/")} className="p-2 hover:bg-white/5 rounded-lg transition-all">
-            <ArrowLeft className="w-4 h-4 text-gray-400" />
-          </button>
-          <div className="w-8 h-8 bg-neon-blue rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)]">
-            <Rocket className="w-5 h-5 text-black" />
+      <header className="h-14 shrink-0 border-b border-line flex items-center gap-4 px-7 z-40 bg-canvas">
+        <button onClick={() => router.push("/")} className="p-1.5 rounded-lg hover:bg-sunk transition-colors">
+          <ArrowLeft className="w-4 h-4 text-muted" />
+        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 bg-moss rounded-full grid place-items-center">
+            <Rocket className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h1 className="text-white font-bold tracking-tight text-lg leading-tight">Build Pipeline</h1>
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-mono">Website Generation Agents</p>
+            <h1 className="font-display font-bold text-[17px] tracking-[-0.02em] leading-tight">Build pipeline</h1>
+            <p className="text-[10px] text-muted uppercase tracking-widest">Website generation agents</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${buildDone ? "bg-neon-green/10 border-neon-green/20" : started ? "bg-neon-blue/10 border-neon-blue/20" : "bg-white/5 border-os-border"}`}>
-            <span className={`w-2 h-2 rounded-full ${buildDone ? "bg-neon-green" : started ? "bg-neon-blue animate-pulse" : "bg-gray-600"}`} />
-            <span className={`text-[10px] font-bold ${buildDone ? "text-neon-green" : started ? "text-neon-blue" : "text-gray-500"}`}>{buildDone ? "Complete" : started ? "Running" : "Idle"}</span>
+        <div className="ml-auto">
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${buildDone ? "bg-moss/10 border-moss/30 text-moss" : started ? "bg-berry-soft border-berry/30 text-berry" : "bg-sunk border-line text-muted"}`}>
+            <span className={`w-2 h-2 rounded-full ${buildDone ? "bg-moss" : started ? "bg-berry node-live-dot" : "bg-wait"}`} />
+            <span className="text-[10px] font-bold">{buildDone ? "Complete" : started ? "Running" : "Idle"}</span>
           </div>
         </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 flex overflow-hidden">
-        {/* Left: Agent visualization */}
-        <div className="flex-1 flex items-center justify-center p-6 relative">
-          <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-neon-blue/5 blur-[120px] rounded-full pointer-events-none" />
-
-          <div className="relative w-full max-w-lg flex flex-col items-center gap-6">
-            {/* Row 1: PRD */}
-            <div className={`flex flex-col items-center ${agentOpacity("PRD Generation")}`}>
-              <div className={`w-20 h-20 rounded-full bg-black border-2 flex flex-col items-center justify-center relative transition-all ${borderColor("PRD Generation")}`}>
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center text-[10px] text-white font-bold">1</span>
-                <FileText className={`w-7 h-7 ${getAgent("PRD Generation")?.status !== "idle" ? "text-neon-blue" : "text-neon-blue/30"}`} />
-              </div>
-              <div className="mt-2 text-center">
-                <p className="text-[10px] font-bold text-white uppercase tracking-wider">PRD Generator</p>
-                {agentLabel("PRD Generation")}
+      <main className="flex-1 min-h-0 flex overflow-hidden">
+        {/* Center pipeline */}
+        <section className="flex-1 min-h-0 p-7 flex flex-col">
+          <div className="bg-panel border border-line rounded-[18px] px-6 pt-4 pb-3 flex flex-col min-h-0 flex-1">
+            <div className="flex justify-between items-center shrink-0">
+              <h2 className="font-display font-bold text-[15px] tracking-[-0.01em]">Pipeline</h2>
+              <div className="flex gap-4 text-[12.5px] text-muted">
+                <span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-moss" /> Done</span>
+                <span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-berry" /> Running</span>
+                <span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-wait" /> Waiting</span>
               </div>
             </div>
-
-            {/* Row 2: Frontend + Backend */}
-            <div className="flex items-center gap-16">
-              {["Frontend Generation", "Backend Schema"].map(name => (
-                <div key={name} className={`flex flex-col items-center ${agentOpacity(name)}`}>
-                  <div className={`w-18 h-18 rounded-full bg-black border-2 flex flex-col items-center justify-center relative transition-all ${borderColor(name)}`} style={{ width: 72, height: 72 }}>
-                    <span className="absolute -top-2 -right-2 w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center text-[10px] text-white font-bold">{BUILD_AGENTS.find(a => a.name === name)!.num}</span>
-                    {name === "Frontend Generation" && <Code className={`w-6 h-6 ${getAgent(name)?.status !== "idle" ? "text-neon-blue" : "text-neon-blue/30"}`} />}
-                    {name === "Backend Schema" && <Database className={`w-6 h-6 ${getAgent(name)?.status !== "idle" ? "text-neon-blue" : "text-neon-blue/30"}`} />}
+            <div className="flex-1 min-h-0 flex flex-col justify-center items-center gap-2 py-4 overflow-y-auto">
+              {groups.map((g, gi) => (
+                <React.Fragment key={gi}>
+                  {gi > 0 && (
+                    <div className={`w-px h-[clamp(8px,1.6vh,14px)] ${groupDone(groups[gi - 1].names) ? "bg-moss" : "bg-line"}`} />
+                  )}
+                  <div className="grid grid-flow-col auto-cols-[minmax(0,214px)] gap-3 justify-center">
+                    {g.nodes}
                   </div>
-                  <div className="mt-2 text-center">
-                    <p className="text-[9px] font-bold text-white uppercase tracking-wider">{name === "Frontend Generation" ? "Frontend" : "Backend"}</p>
-                    {agentLabel(name)}
-                  </div>
-                </div>
+                </React.Fragment>
               ))}
             </div>
 
-            {/* Row 3: Build */}
-            <div className={`flex flex-col items-center ${agentOpacity("Build")}`}>
-              <div className={`w-20 h-20 rounded-full bg-black border-2 flex flex-col items-center justify-center relative transition-all ${borderColor("Build")}`}>
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center text-[10px] text-white font-bold">4</span>
-                <GitBranch className={`w-7 h-7 ${getAgent("Build")?.status !== "idle" ? "text-neon-blue" : "text-neon-blue/30"}`} />
-              </div>
-              <div className="mt-2 text-center">
-                <p className="text-[10px] font-bold text-white uppercase tracking-wider">Build Agent</p>
-                {agentLabel("Build")}
-              </div>
-            </div>
-
-            {/* Row 4: Deploy */}
-            <div className={`flex flex-col items-center ${agentOpacity("Deploy")}`}>
-              <div className={`w-20 h-20 rounded-full bg-black border-2 flex flex-col items-center justify-center relative transition-all ${borderColor("Deploy")}`}>
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-neon-blue rounded-full flex items-center justify-center text-[10px] text-white font-bold">5</span>
-                <Rocket className={`w-7 h-7 ${getAgent("Deploy")?.status !== "idle" ? "text-neon-blue" : "text-neon-blue/30"}`} />
-              </div>
-              <div className="mt-2 text-center">
-                <p className="text-[10px] font-bold text-white uppercase tracking-wider">Deploy Agent</p>
-                {agentLabel("Deploy")}
-              </div>
-            </div>
-
-            {/* Row 5: Notify */}
-            <div className={`flex flex-col items-center ${agentOpacity("Notify")}`}>
-              <div className={`w-20 h-20 rounded-full bg-black border-2 flex flex-col items-center justify-center relative transition-all ${borderColor("Notify")}`}>
-                <span className="absolute -top-2 -right-2 w-5 h-5 bg-neon-purple rounded-full flex items-center justify-center text-[10px] text-white font-bold">6</span>
-                <Bell className={`w-7 h-7 ${getAgent("Notify")?.status !== "idle" ? "text-neon-purple" : "text-neon-purple/30"}`} />
-              </div>
-              <div className="mt-2 text-center">
-                <p className="text-[10px] font-bold text-white uppercase tracking-wider">Notify Agent</p>
-                {agentLabel("Notify")}
-              </div>
-            </div>
-
-            {/* Build Results */}
             {buildDone && result && (
-              <div className="glass-panel rounded-2xl p-5 w-full max-w-md space-y-3 mt-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2"><Check className="w-4 h-4 text-neon-green" />Build Complete</h3>
+              <div className="bg-panel border border-line rounded-2xl p-4 space-y-3 mt-3 shrink-0">
+                <h3 className="font-display font-bold text-[15px] flex items-center gap-2"><Check className="w-4 h-4 text-moss" />Build complete</h3>
                 {result.preview_url && (
-                  <div className="flex items-center justify-between bg-black/40 p-3 rounded-lg border border-os-border">
-                    <span className="text-xs text-gray-400 font-mono">Preview</span>
-                    <a href={result.preview_url} target="_blank" rel="noreferrer" className="text-xs text-neon-green hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3" />Open</a>
+                  <div className="flex items-center justify-between bg-sunk/50 p-3 rounded-lg border border-line">
+                    <span className="text-xs text-muted font-mono">Preview</span>
+                    <a href={result.preview_url} target="_blank" rel="noreferrer" className="text-xs text-moss hover:underline flex items-center gap-1"><ExternalLink className="w-3 h-3" />Open</a>
                   </div>
                 )}
                 {result.github_repo_url && (
-                  <div className="flex items-center justify-between bg-black/40 p-3 rounded-lg border border-os-border">
-                    <span className="text-xs text-gray-400 font-mono">GitHub</span>
-                    <a href={result.github_repo_url} target="_blank" rel="noreferrer" className="text-xs text-neon-green hover:underline flex items-center gap-1"><GitBranch className="w-3 h-3" />Repo</a>
+                  <div className="flex items-center justify-between bg-sunk/50 p-3 rounded-lg border border-line">
+                    <span className="text-xs text-muted font-mono">GitHub</span>
+                    <a href={result.github_repo_url} target="_blank" rel="noreferrer" className="text-xs text-moss hover:underline flex items-center gap-1"><GitBranch className="w-3 h-3" />Repo</a>
                   </div>
                 )}
-                <button onClick={() => router.push("/")} className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-os-border rounded-xl text-xs font-bold text-gray-300 transition-all">
-                  Back to Dashboard
+                <button onClick={() => router.push("/")} className="w-full py-2.5 border border-line hover:bg-sunk rounded-xl text-xs font-semibold text-muted transition-colors">
+                  Back to dashboard
                 </button>
               </div>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Right: Logs */}
-        <aside className="w-[380px] flex flex-col p-4 gap-4 z-10 shrink-0">
-          <div className="glass-panel rounded-2xl p-5 flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center gap-2 mb-4">
-              <FileText className="w-4 h-4 text-neon-blue" />
-              <h2 className="text-xs font-bold tracking-widest text-white uppercase">Build Log</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 terminal-scroll">
+        {/* Right: logs */}
+        <aside className="w-[380px] shrink-0 p-7 pl-0 flex flex-col min-h-0">
+          <div className="bg-panel border border-line rounded-[18px] p-5 flex-1 flex flex-col min-h-0">
+            <h2 className="font-display font-bold text-[15px] tracking-[-0.01em] mb-4">Build log</h2>
+            <div className="flex-1 overflow-y-auto font-mono text-[12.5px] leading-[1.8]">
               {logs.length === 0 ? (
-                <p className="text-xs text-gray-600 italic text-center py-8 font-mono">Waiting for build to start...</p>
+                <p className="text-muted italic text-center py-8">Waiting for build to start…</p>
               ) : (
-                logs.map((log, idx) => {
-                  const time = new Date().toLocaleTimeString();
-                  return (
-                    <div key={idx} className="flex items-start gap-2 group">
-                      <span className="text-[10px] font-mono text-gray-700 shrink-0 mt-0.5">{time}</span>
-                      <span className={`text-[11px] leading-relaxed ${log.includes("[System Error]") ? "text-red-400" : log.includes("[System]") ? "text-white font-semibold" : "text-gray-300"}`}>{log}</span>
-                    </div>
-                  );
-                })
+                logs.map((log, idx) => (
+                  <div key={idx} className="flex gap-[14px]">
+                    <time className="text-muted flex-none">{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
+                    <span>{renderLog(log)}</span>
+                  </div>
+                ))
               )}
               <div ref={terminalEndRef} />
             </div>
@@ -296,7 +293,7 @@ function BuildPageInner() {
 
 export default function BuildPage() {
   return (
-    <Suspense fallback={<div className="h-screen flex items-center justify-center bg-os-black text-gray-400 font-mono text-sm">Loading build pipeline...</div>}>
+    <Suspense fallback={<div className="h-screen flex items-center justify-center bg-canvas text-muted font-mono text-sm">Loading build pipeline…</div>}>
       <BuildPageInner />
     </Suspense>
   );

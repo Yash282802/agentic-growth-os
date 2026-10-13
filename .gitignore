@@ -46,3 +46,6 @@ Thumbs.db
 # Railway
 .railway/
 railway.json
+
+.vercel
+.env*
