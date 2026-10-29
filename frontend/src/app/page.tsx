@@ -178,7 +178,7 @@ export default function Home() {
     setShowLeadPanel(false);
     setLeads([]);
     setSelectedLead(null);
-    setLogs(["[System] Initializing Agentic Growth OS workflow...", `[System] Target: ${niche} in ${location}`]);
+    setLogs(["[System] Initializing Scalix System workflow...", `[System] Target: ${niche} in ${location}`]);
     setAgents(AGENT_CONFIGS.map(a => ({ name: a.name, status: "idle", progress: "Waiting", message: a.description })));
     try {
       const response = await fetch(`${API_BASE}/api/run`, {
@@ -322,7 +322,7 @@ export default function Home() {
             <circle cx="18" cy="18" r="2.3" fill="#F6F8F3" />
             <path d="M8 13l10-5M8 13l10 5" stroke="#F6F8F3" strokeWidth="1.4" />
           </svg>
-          <h1 className="font-display font-bold text-[17px] tracking-[-0.02em]">Agentic Growth OS</h1>
+          <h1 className="font-display font-bold text-[17px] tracking-[-0.02em]">Scalix System</h1>
         </div>
         <nav className="hidden md:flex gap-1 h-full">
           {NAV.map(item => {

@@ -21,7 +21,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agentic Growth OS",
+  title: "Scalix System",
   description: "B2B client acquisition pipeline powered by NVIDIA AI Stack",
 };
 
