@@ -7,7 +7,7 @@ import {
   Check, ExternalLink, ArrowLeft
 } from "lucide-react";
 
-const API_BASE = "https://agentic-growth-os-backend.onrender.com";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://agentic-growth-os-backend.onrender.com";
 
 interface AgentState {
   name: string;

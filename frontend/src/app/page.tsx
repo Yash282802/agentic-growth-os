@@ -50,7 +50,7 @@ interface AgentState {
   message: string;
 }
 
-const API_BASE = "https://agentic-growth-os-backend.onrender.com";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "https://agentic-growth-os-backend.onrender.com";
 
 const AGENT_CONFIGS: { name: string; description: string }[] = [
   { name: "Lead Discovery", description: "Discovers businesses via Google Places" },
