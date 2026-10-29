@@ -14,6 +14,7 @@ class LeadRecord(BaseModel):
     review_count: Optional[int] = None
     hours: Optional[str] = None
     photos: List[str] = []
+    website_url: Optional[str] = None
 
 class AuditedLeadRecord(LeadRecord):
     has_website: bool

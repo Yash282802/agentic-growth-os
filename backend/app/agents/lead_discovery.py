@@ -3,15 +3,36 @@ import urllib.parse
 from typing import List, Callable, Dict, Any
 from app.agents.base import AgentIQAgent
 from app.schemas import LeadRecord
-from app.config import GOOGLE_PLACES_API_KEY
+from app.config import GOOGLE_PLACES_API_KEY, GEOAPIFY_API_KEY
+
+# Maps a free-text niche to a Geoapify Places category.
+CATEGORY_HINTS = [
+    (("restaurant", "food", "cafe", "coffee", "bakery", "pizza"), "catering"),
+    (("salon", "hair", "spa", "beauty", "nail", "barber"), "service.beauty"),
+    (("dentist", "dental", "orthodont"), "healthcare.dentist"),
+    (("clinic", "doctor", "medical", "physio", "hospital"), "healthcare.clinic_or_praxis"),
+    (("gym", "fitness", "yoga"), "sport"),
+    (("hotel", "motel", "hostel"), "accommodation.hotel"),
+    (("lawyer", "attorney", "accountant", "consulting", "agency", "insurance"), "office"),
+    (("shop", "store", "boutique", "market"), "commercial"),
+]
+
+def geoapify_category(niche: str) -> str:
+    n = niche.lower()
+    for keywords, category in CATEGORY_HINTS:
+        if any(k in n for k in keywords):
+            return category
+    return "commercial"
+
 
 class LeadDiscoveryAgent(AgentIQAgent):
     def __init__(self):
         super().__init__(
             name="Lead Discovery",
-            description="Finds real businesses matching a niche and location using Google Places API or mock simulation."
+            description="Finds real businesses matching a niche and location using Geoapify or Google Places."
         )
         self.api_key = GOOGLE_PLACES_API_KEY
+        self.geoapify_key = GEOAPIFY_API_KEY
 
     async def run(self, input_data: Dict[str, str], log_callback: Callable[[str], None]) -> List[LeadRecord]:
         niche = input_data.get("niche", "")
@@ -19,9 +40,12 @@ class LeadDiscoveryAgent(AgentIQAgent):
         max_leads = input_data.get("max_leads", 10)
         
         log_callback(f"Analyzing query: searching for '{niche}' in '{location}'")
-        
+
+        if self.geoapify_key:
+            return await self._discover_geoapify(niche, location, max_leads, log_callback)
+
         if not self.api_key:
-            log_callback("Google Places API Key not found. Initiating dynamic Lead Simulation engine.")
+            log_callback("No Places API key configured. Initiating dynamic Lead Simulation engine.")
             return await self._simulate_leads(niche, location, max_leads, log_callback)
 
         log_callback(f"Connecting to Google Places API to find {niche} in {location}...")
@@ -86,6 +110,7 @@ class LeadDiscoveryAgent(AgentIQAgent):
                         business_name=name,
                         address=address,
                         phone=phone,
+                        website_url=website,
                         category=niche.capitalize(),
                         google_maps_url=maps_url,
                         rating=rating
@@ -97,6 +122,69 @@ class LeadDiscoveryAgent(AgentIQAgent):
             return await self._simulate_leads(niche, location, max_leads, log_callback)
             
         return leads
+
+    async def _discover_geoapify(self, niche: str, location: str, max_leads: int, log_callback: Callable[[str], None]) -> List[LeadRecord]:
+        log_callback(f"Connecting to Geoapify to find {niche} in {location}...")
+        category = geoapify_category(niche)
+
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                geo = await client.get(
+                    "https://api.geoapify.com/v1/geocode/search",
+                    params={"text": location, "limit": 1, "format": "json", "apiKey": self.geoapify_key},
+                )
+                results = geo.json().get("results", []) if geo.status_code == 200 else []
+                if not results:
+                    log_callback(f"Could not geocode '{location}' (status {geo.status_code}). Falling back to simulation.")
+                    return await self._simulate_leads(niche, location, max_leads, log_callback)
+
+                lat, lon = results[0]["lat"], results[0]["lon"]
+                log_callback(f"Resolved {location} to ({lat}, {lon}). Searching category '{category}'...")
+
+                places = await client.get(
+                    "https://api.geoapify.com/v2/places",
+                    params={
+                        "categories": category,
+                        "filter": f"circle:{lon},{lat},15000",
+                        "limit": max_leads,
+                        "apiKey": self.geoapify_key,
+                    },
+                )
+                if places.status_code != 200:
+                    log_callback(f"Geoapify Places error: {places.status_code} {places.text[:120]}. Falling back to simulation.")
+                    return await self._simulate_leads(niche, location, max_leads, log_callback)
+
+                features = places.json().get("features", [])
+                log_callback(f"Found {len(features)} raw business listings. Fetching contact details...")
+
+                leads = []
+                for idx, feature in enumerate(features):
+                    props = feature.get("properties", {})
+                    name = props.get("name")
+                    if not name:
+                        continue
+
+                    plat, plon = props.get("lat"), props.get("lon")
+                    leads.append(LeadRecord(
+                        business_name=name,
+                        address=props.get("formatted"),
+                        phone=props.get("contact", {}).get("phone"),
+                        website_url=props.get("website"),
+                        category=niche.capitalize(),
+                        google_maps_url=f"https://www.google.com/maps/search/?api=1&query={plat},{plon}",
+                        hours=props.get("opening_hours"),
+                        # ponytail: Geoapify has no ratings; scoring just skips that 10-pt factor
+                    ))
+                    log_callback(f"[{idx+1}/{len(features)}] Discovered: {name} (Web: {props.get('website') or 'None'})")
+
+                if not leads:
+                    log_callback("Geoapify returned no usable listings. Falling back to simulation.")
+                    return await self._simulate_leads(niche, location, max_leads, log_callback)
+                return leads
+
+        except Exception as e:
+            log_callback(f"Geoapify search failed: {str(e)}. Falling back to simulation.")
+            return await self._simulate_leads(niche, location, max_leads, log_callback)
 
     async def _simulate_leads(self, niche: str, location: str, max_leads: int, log_callback: Callable[[str], None]) -> List[LeadRecord]:
         """
@@ -208,3 +296,10 @@ def random_rating(seed: int) -> float:
     # Deterministic rating generation
     ratings = [4.2, 3.8, 4.8, 3.5, 4.0]
     return ratings[seed % len(ratings)]
+
+if __name__ == "__main__":
+    assert geoapify_category("Hair Salons") == "service.beauty"
+    assert geoapify_category("Dentists") == "healthcare.dentist"
+    assert geoapify_category("Coffee shops") == "catering"
+    assert geoapify_category("Plumbers") == "commercial"
+    print("geoapify_category OK")

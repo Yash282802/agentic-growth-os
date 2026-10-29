@@ -17,6 +17,11 @@ VERCEL_TEAM_ID = os.getenv("VERCEL_TEAM_ID", "")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_API_BASE = os.getenv("NVIDIA_API_BASE", "https://integrate.api.nvidia.com/v1")
 
+# Gemini Configuration (takes precedence: OpenAI-compatible endpoint)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_BASE = os.getenv("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
+
 # NIM Model Choices
 MODEL_OUTREACH = "meta/llama-3.3-70b-instruct"
 MODEL_SCORING = "meta/llama-3.3-70b-instruct"
@@ -26,6 +31,9 @@ MODEL_CODE = "meta/llama-3.3-70b-instruct"
 
 # Google Places Configuration
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+
+# Geoapify (free, no billing required) - preferred over Google Places when set
+GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY", "")
 
 # Frontend URL (for CORS in production)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")

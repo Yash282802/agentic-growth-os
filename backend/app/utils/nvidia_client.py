@@ -2,20 +2,29 @@ import httpx
 import logging
 import random
 from typing import List, Dict, Any, Optional
-from app.config import NVIDIA_API_KEY, NVIDIA_API_BASE, MODEL_OUTREACH, MODEL_SCORING, MODEL_AUDIT, MODEL_EMBEDDING
+from app.config import (
+    NVIDIA_API_KEY, NVIDIA_API_BASE,
+    GEMINI_API_KEY, GEMINI_API_BASE, GEMINI_MODEL,
+    MODEL_OUTREACH, MODEL_SCORING, MODEL_AUDIT, MODEL_EMBEDDING
+)
 
 logger = logging.getLogger("nvidia_client")
 
 class NvidiaClient:
     def __init__(self):
-        self.api_key = NVIDIA_API_KEY
-        self.base_url = NVIDIA_API_BASE
+        # ponytail: Gemini speaks the OpenAI schema, so one client covers both
+        self.provider = "gemini" if GEMINI_API_KEY else "nvidia"
+        self.api_key = GEMINI_API_KEY or NVIDIA_API_KEY
+        self.base_url = GEMINI_API_BASE if GEMINI_API_KEY else NVIDIA_API_BASE
         self.is_mock = not bool(self.api_key)
-        
+
         if self.is_mock:
-            logger.warning("NVIDIA_API_KEY not found. Running in robust Mock/Fallback Mode.")
+            logger.warning("No LLM API key found. Running in robust Mock/Fallback Mode.")
         else:
-            logger.info("NVIDIA_API_KEY loaded. NVIDIA NIM Live API is active.")
+            logger.info(f"LLM provider: {self.provider} ({self.base_url})")
+
+    def _provider_model(self, model: str) -> str:
+        return GEMINI_MODEL if self.provider == "gemini" else model
 
     async def get_chat_completion(
         self,
@@ -37,7 +46,7 @@ class NvidiaClient:
         }
         
         payload = {
-            "model": model,
+            "model": self._provider_model(model),
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens
@@ -65,7 +74,8 @@ class NvidiaClient:
         Retrieves text embeddings using NVIDIA NIM. Falls back to a deterministic mock vector on error.
         After 3 API failures, switches permanently to fast mock mode.
         """
-        if self.is_mock:
+        if self.is_mock or self.provider == "gemini":
+            # ponytail: no embeddings on the OpenAI-compat path; deterministic hash vector is enough for dedupe
             return self._generate_mock_embeddings(text)
 
         headers = {

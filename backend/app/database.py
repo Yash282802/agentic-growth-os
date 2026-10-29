@@ -62,8 +62,9 @@ def _run_migrations():
                 conn.execute(text(f"ALTER TABLE leads ADD COLUMN {col_name} {col_type}"))
                 conn.commit()
                 logger.info(f"Added column leads.{col_name}")
-            except Exception:
+            except Exception as e:
                 conn.rollback()
+                logger.debug(f"Skipped leads.{col_name}: {e}")
         conn.close()
         logger.info("Migrations completed.")
     except Exception as e:

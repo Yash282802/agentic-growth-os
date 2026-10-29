@@ -110,6 +110,8 @@ class WebsiteAuditAgent(AgentIQAgent):
         """
         Extracts website URL. For simulation purposes, we match specific business names to mock domains.
         """
+        if lead.website_url:
+            return lead.website_url
         name_lower = lead.business_name.lower()
         if "golden fork" in name_lower:
             return "http://thegoldenfork.example.com"
